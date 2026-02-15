@@ -116,6 +116,10 @@ func (a *application) run(args []string) error {
 		return a.cmdStatus(args[1:])
 	case "model":
 		return a.cmdModel(args[1:])
+	case "preflight":
+		return a.cmdPreflight(args[1:])
+	case "handoff":
+		return a.cmdHandoff(args[1:])
 	case "failover":
 		return a.cmdFailover(args[1:])
 	case "use":
@@ -1623,6 +1627,397 @@ func (a *application) cmdModel(args []string) error {
 	return nil
 }
 
+type preflightCheck struct {
+	Name     string `json:"name"`
+	OK       bool   `json:"ok"`
+	Blocking bool   `json:"blocking"`
+	Detail   string `json:"detail"`
+}
+
+type preflightReport struct {
+	GeneratedAt    string           `json:"generated_at"`
+	FromScope      string           `json:"from_scope"`
+	ToScope        string           `json:"to_scope"`
+	RequestedModel string           `json:"requested_model,omitempty"`
+	ResolvedModel  string           `json:"resolved_model,omitempty"`
+	Checks         []preflightCheck `json:"checks"`
+	PreflightCmd   string           `json:"preflight_command,omitempty"`
+	FailoverCmd    string           `json:"failover_command,omitempty"`
+	DoctorCmd      string           `json:"doctor_command,omitempty"`
+}
+
+func (r preflightReport) blockingFailures() int {
+	count := 0
+	for _, c := range r.Checks {
+		if c.Blocking && !c.OK {
+			count++
+		}
+	}
+	return count
+}
+
+func (r preflightReport) warningFailures() int {
+	count := 0
+	for _, c := range r.Checks {
+		if !c.Blocking && !c.OK {
+			count++
+		}
+	}
+	return count
+}
+
+func (r preflightReport) renderText() string {
+	var b strings.Builder
+	model := strings.TrimSpace(r.ResolvedModel)
+	if model == "" {
+		model = "<unspecified>"
+	}
+	_, _ = fmt.Fprintf(&b, "preflight: from=%s to=%s model=%s\n", r.FromScope, r.ToScope, model)
+	for _, c := range r.Checks {
+		status := "OK"
+		if !c.OK && c.Blocking {
+			status = "FAIL"
+		} else if !c.OK {
+			status = "WARN"
+		}
+		if c.Blocking {
+			_, _ = fmt.Fprintf(&b, "[%s] %s (blocking): %s\n", status, c.Name, c.Detail)
+		} else {
+			_, _ = fmt.Fprintf(&b, "[%s] %s: %s\n", status, c.Name, c.Detail)
+		}
+	}
+	_, _ = fmt.Fprintf(&b, "blocking failures: %d\n", r.blockingFailures())
+	_, _ = fmt.Fprintf(&b, "warnings: %d\n", r.warningFailures())
+	if strings.TrimSpace(r.FailoverCmd) != "" {
+		_, _ = fmt.Fprintf(&b, "next: %s\n", r.FailoverCmd)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (r preflightReport) renderHandoffMarkdown() string {
+	var b strings.Builder
+	_, _ = fmt.Fprintf(&b, "# ccgateway failover handoff\n\n")
+	_, _ = fmt.Fprintf(&b, "- generated_at: %s\n", r.GeneratedAt)
+	_, _ = fmt.Fprintf(&b, "- from: `%s`\n", r.FromScope)
+	_, _ = fmt.Fprintf(&b, "- to: `%s`\n", r.ToScope)
+	if strings.TrimSpace(r.ResolvedModel) != "" {
+		_, _ = fmt.Fprintf(&b, "- model: `%s`\n", r.ResolvedModel)
+	}
+	_, _ = fmt.Fprintf(&b, "- blocking_failures: `%d`\n", r.blockingFailures())
+	_, _ = fmt.Fprintf(&b, "- warnings: `%d`\n\n", r.warningFailures())
+
+	_, _ = fmt.Fprintf(&b, "## Preflight checks\n\n")
+	for _, c := range r.Checks {
+		status := "OK"
+		if !c.OK && c.Blocking {
+			status = "FAIL"
+		} else if !c.OK {
+			status = "WARN"
+		}
+		if c.Blocking {
+			_, _ = fmt.Fprintf(&b, "- [%s][blocking] %s: %s\n", status, c.Name, c.Detail)
+		} else {
+			_, _ = fmt.Fprintf(&b, "- [%s] %s: %s\n", status, c.Name, c.Detail)
+		}
+	}
+
+	_, _ = fmt.Fprintf(&b, "\n## Recommended commands\n\n")
+	if strings.TrimSpace(r.PreflightCmd) != "" {
+		_, _ = fmt.Fprintf(&b, "```bash\n%s\n```\n\n", r.PreflightCmd)
+	}
+	if strings.TrimSpace(r.FailoverCmd) != "" {
+		_, _ = fmt.Fprintf(&b, "```bash\n%s\n```\n\n", r.FailoverCmd)
+	}
+	if strings.TrimSpace(r.DoctorCmd) != "" {
+		_, _ = fmt.Fprintf(&b, "```bash\n%s\n```\n", r.DoctorCmd)
+	}
+	return strings.TrimSpace(b.String()) + "\n"
+}
+
+func (a *application) cmdPreflight(args []string) error {
+	fs := flag.NewFlagSet("preflight", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fromScope := fs.String("from", "", "source scope (vendor:profile)")
+	toScope := fs.String("to", "", "target scope (vendor:profile)")
+	modelName := fs.String("model", "", "target model name")
+	jsonOutput := fs.Bool("json", false, "emit machine-readable output")
+	if err := fs.Parse(args); err != nil {
+		return parseFlagError(err, preflightUsage(), "failed to parse preflight flags")
+	}
+	if err := ensureNoExtraArgs(fs, preflightUsage()); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*fromScope) == "" || strings.TrimSpace(*toScope) == "" {
+		return cberr.New(cberr.ErrInvalidArgs, "preflight requires --from and --to")
+	}
+	fromRef, err := scope.ScopeFromID(*fromScope)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --from scope id", err)
+	}
+	toRef, err := scope.ScopeFromID(*toScope)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --to scope id", err)
+	}
+	if fromRef.ScopeID() == toRef.ScopeID() {
+		return cberr.New(cberr.ErrInvalidArgs, "preflight requires different --from and --to scopes")
+	}
+
+	report, err := a.evaluateFailoverPreflight(fromRef, toRef, *modelName)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		encoded, encErr := json.MarshalIndent(report, "", "  ")
+		if encErr != nil {
+			return cberr.Wrap(cberr.ErrInvalidConfig, "failed to encode preflight report", encErr)
+		}
+		fmt.Println(string(encoded))
+	} else {
+		fmt.Println(report.renderText())
+	}
+	if failures := report.blockingFailures(); failures > 0 {
+		return cberr.New(cberr.ErrSwitchValidation, fmt.Sprintf("preflight found %d blocking checks", failures))
+	}
+	return nil
+}
+
+func (a *application) cmdHandoff(args []string) error {
+	if len(args) == 0 {
+		return cberr.New(cberr.ErrInvalidArgs, handoffUsage())
+	}
+	sub := args[0]
+	if isHelpArg(sub) {
+		fmt.Println(handoffUsage())
+		return nil
+	}
+	if sub != "create" {
+		return cberr.New(cberr.ErrInvalidArgs, handoffUsage())
+	}
+
+	fs := flag.NewFlagSet("handoff create", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fromScope := fs.String("from", "", "source scope (vendor:profile)")
+	toScope := fs.String("to", "", "target scope (vendor:profile)")
+	modelName := fs.String("model", "", "target model name")
+	outputPath := fs.String("output", "", "output file path")
+	jsonOutput := fs.Bool("json", false, "emit JSON handoff bundle")
+	if err := fs.Parse(args[1:]); err != nil {
+		return parseFlagError(err, handoffUsage(), "failed to parse handoff flags")
+	}
+	if err := ensureNoExtraArgs(fs, handoffUsage()); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*fromScope) == "" || strings.TrimSpace(*toScope) == "" {
+		return cberr.New(cberr.ErrInvalidArgs, "handoff create requires --from and --to")
+	}
+	fromRef, err := scope.ScopeFromID(*fromScope)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --from scope id", err)
+	}
+	toRef, err := scope.ScopeFromID(*toScope)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --to scope id", err)
+	}
+	if fromRef.ScopeID() == toRef.ScopeID() {
+		return cberr.New(cberr.ErrInvalidArgs, "handoff create requires different --from and --to scopes")
+	}
+
+	report, err := a.evaluateFailoverPreflight(fromRef, toRef, *modelName)
+	if err != nil {
+		return err
+	}
+
+	var content []byte
+	if *jsonOutput {
+		encoded, encErr := json.MarshalIndent(report, "", "  ")
+		if encErr != nil {
+			return cberr.Wrap(cberr.ErrInvalidConfig, "failed to encode handoff bundle", encErr)
+		}
+		content = append(encoded, '\n')
+	} else {
+		content = []byte(report.renderHandoffMarkdown())
+	}
+
+	if strings.TrimSpace(*outputPath) != "" {
+		path := config.ExpandHome(*outputPath, a.home)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return cberr.Wrap(cberr.ErrInvalidConfig, "failed to create handoff output directory", err)
+		}
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			return cberr.Wrap(cberr.ErrStateWriteFailed, "failed to write handoff bundle", err)
+		}
+		fmt.Printf("handoff bundle written: %s\n", path)
+		return nil
+	}
+
+	fmt.Print(string(content))
+	return nil
+}
+
+func (a *application) evaluateFailoverPreflight(fromRef, toRef scope.Ref, modelInput string) (preflightReport, error) {
+	report := preflightReport{
+		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
+		FromScope:      fromRef.ScopeID(),
+		ToScope:        toRef.ScopeID(),
+		RequestedModel: strings.TrimSpace(modelInput),
+	}
+	addCheck := func(name string, ok, blocking bool, detail string) {
+		report.Checks = append(report.Checks, preflightCheck{
+			Name:     name,
+			OK:       ok,
+			Blocking: blocking,
+			Detail:   strings.TrimSpace(detail),
+		})
+	}
+
+	fromRT, err := a.loadRuntime(fromRef, false)
+	if err != nil {
+		return report, err
+	}
+	if err := a.enforcePolicy(fromRT, "preflight source"); err != nil {
+		addCheck("source policy guard", false, true, err.Error())
+	} else {
+		addCheck("source policy guard", true, true, "ok")
+	}
+
+	active, err := control.LoadActive(fromRT.Paths.ActivePath)
+	if err != nil {
+		addCheck("source active contract", false, true, fmt.Sprintf("failed to load active pointer: %v", err))
+	} else if active.ActiveVendor != fromRef.VendorID || active.ActiveProfile != fromRef.ProfileID {
+		activeScope := "<unset>"
+		if strings.TrimSpace(active.ActiveVendor) != "" && strings.TrimSpace(active.ActiveProfile) != "" {
+			activeScope = fmt.Sprintf("%s:%s", active.ActiveVendor, active.ActiveProfile)
+		}
+		addCheck(
+			"source active contract",
+			false,
+			true,
+			fmt.Sprintf(
+				"active scope mismatch (active=%s source=%s); run: ccb use --vendor %s --profile %s",
+				activeScope,
+				fromRef.ScopeID(),
+				fromRef.VendorID,
+				fromRef.ProfileID,
+			),
+		)
+	} else if err := ensureActiveSwitchContract(active, fromRT.State, fromRef, "preflight source"); err != nil {
+		addCheck("source active contract", false, true, err.Error())
+	} else {
+		addCheck("source active contract", true, true, fmt.Sprintf("active=%s generation=%s", fromRef.ScopeID(), strings.TrimSpace(active.ActiveGeneration)))
+	}
+
+	fromDoctor := doctor.RunScoped(doctor.ScopedInput{
+		Scope:  fromRef,
+		Paths:  fromRT.Paths,
+		Config: fromRT.Config,
+		State:  fromRT.State,
+		Active: active,
+	})
+	if check, ok := findCheck(fromDoctor.Checks, "route proof"); ok {
+		addCheck("source route proof", check.OK, false, check.Detail)
+	}
+	if check, ok := findCheck(fromDoctor.Checks, "model proof"); ok {
+		addCheck("source model proof", check.OK, false, check.Detail)
+	}
+	if check, ok := findCheck(fromDoctor.Checks, "tool-call integrity"); ok {
+		addCheck("source tool-call integrity", check.OK, false, check.Detail)
+	}
+
+	targetPaths := scope.BuildPaths(a.home, a.cwd, toRef)
+	targetExists := false
+	if _, statErr := os.Stat(targetPaths.ConfigPath); statErr == nil {
+		targetExists = true
+	} else if !os.IsNotExist(statErr) {
+		return report, cberr.Wrap(cberr.ErrInvalidConfig, "failed to inspect target scope config", statErr)
+	}
+
+	targetDefaults := config.DefaultForScope(a.home, a.cwd, toRef.VendorID, toRef.ProfileID)
+	targetCfg := targetDefaults
+	if targetExists {
+		toRT, err := a.loadRuntime(toRef, false)
+		if err != nil {
+			return report, err
+		}
+		targetCfg = toRT.Config
+
+		if err := a.enforcePolicy(toRT, "preflight target"); err != nil {
+			addCheck("target policy guard", false, true, err.Error())
+		} else {
+			addCheck("target policy guard", true, true, "ok")
+		}
+		if toRT.Config.RuntimeMode == config.RuntimeModeNativeCleanup {
+			addCheck("target runtime mode", false, true, fmt.Sprintf("target runtime_mode=%s is cleanup-only and cannot be failover target", config.RuntimeModeNativeCleanup))
+		} else {
+			addCheck("target runtime mode", true, true, string(toRT.Config.RuntimeMode))
+		}
+		if err := ensureScopedSettingsBinding(toRT, "preflight target"); err != nil {
+			addCheck("target settings binding", false, true, err.Error())
+		} else {
+			addCheck("target settings binding", true, true, toRT.Config.SettingsPath)
+		}
+		if err := a.ensureProviderCapability(toRT, provider.CapabilityClaude); err != nil {
+			addCheck("target provider capability", false, true, err.Error())
+		} else {
+			addCheck("target provider capability", true, true, "claude patcher available")
+		}
+		if isGatewayProxyMode(toRT) {
+			if _, statErr := os.Stat(toRT.Paths.ProxyBinary); statErr != nil {
+				addCheck(
+					"target gateway artifact",
+					false,
+					false,
+					fmt.Sprintf("proxy binary missing (%s); failover can install it, but cold start may be slower", toRT.Paths.ProxyBinary),
+				)
+			} else {
+				addCheck("target gateway artifact", true, false, toRT.Paths.ProxyBinary)
+			}
+		}
+	} else {
+		addCheck("target scope", true, false, "scope does not exist yet; failover will bootstrap target")
+		if targetDefaults.RuntimeMode == config.RuntimeModeNativeCleanup {
+			addCheck("target runtime mode", false, true, fmt.Sprintf("default runtime_mode=%s is cleanup-only and cannot be failover target", config.RuntimeModeNativeCleanup))
+		} else {
+			addCheck("target runtime mode", true, true, string(targetDefaults.RuntimeMode))
+		}
+		targetBundle, ok := a.registry.Get(toRef.VendorID)
+		if !ok {
+			addCheck("target provider capability", false, true, fmt.Sprintf("provider %s is not registered", toRef.VendorID))
+		} else if !targetBundle.Has(provider.CapabilityClaude) || !capabilityImplemented(targetBundle, provider.CapabilityClaude) {
+			addCheck("target provider capability", false, true, fmt.Sprintf("provider %s does not support claude capability", toRef.VendorID))
+		} else {
+			addCheck("target provider capability", true, true, "claude patcher available")
+		}
+	}
+
+	modelValue := strings.TrimSpace(modelInput)
+	if modelValue == "" {
+		modelValue = strings.TrimSpace(targetCfg.Model)
+		if modelValue == "" {
+			modelValue = strings.TrimSpace(targetDefaults.Model)
+		}
+		addCheck("target model input", true, false, fmt.Sprintf("model omitted; defaulting to %q", modelValue))
+	}
+	normalizedModel, normErr := modelnorm.NormalizeForVendor(toRef.VendorID, modelValue)
+	if normErr != nil {
+		addCheck("target model policy", false, true, normErr.Error())
+	} else {
+		report.ResolvedModel = normalizedModel
+		addCheck("target model policy", true, true, normalizedModel)
+	}
+	if report.ResolvedModel == "" {
+		report.ResolvedModel = modelValue
+	}
+
+	modelArg := strings.TrimSpace(report.ResolvedModel)
+	if modelArg == "" {
+		modelArg = "<model>"
+	}
+	report.PreflightCmd = fmt.Sprintf("ccb preflight --from %s --to %s --model %s", fromRef.ScopeID(), toRef.ScopeID(), modelArg)
+	report.FailoverCmd = fmt.Sprintf("ccb failover --from %s --to %s --model %s", fromRef.ScopeID(), toRef.ScopeID(), modelArg)
+	report.DoctorCmd = fmt.Sprintf("ccb doctor --vendor %s --profile %s", toRef.VendorID, toRef.ProfileID)
+	return report, nil
+}
+
 func (a *application) cmdFailover(args []string) error {
 	fs := flag.NewFlagSet("failover", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -2434,6 +2829,8 @@ func usage() string {
   %s
   %s
   %s
+  %s
+  %s
   %s`,
 		bootstrapUsage(),
 		setupUsage(),
@@ -2444,6 +2841,8 @@ func usage() string {
 		failoverUsage(),
 		useUsage(),
 		doctorUsage(),
+		preflightUsage(),
+		handoffUsage(),
 		uninstallUsage(),
 	))
 }
@@ -2490,6 +2889,14 @@ func statusUsage() string {
 
 func modelUsage() string {
 	return "ccb model switch --vendor <v> --profile <p> --model <name>"
+}
+
+func preflightUsage() string {
+	return "ccb preflight --from <vendor:profile> --to <vendor:profile> [--model <name>] [--json]"
+}
+
+func handoffUsage() string {
+	return "ccb handoff create --from <vendor:profile> --to <vendor:profile> [--model <name>] [--output <path>] [--json]"
 }
 
 func failoverUsage() string {

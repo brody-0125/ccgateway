@@ -113,8 +113,12 @@ Cleanup transition (gateway -> native-cleanup) only:
 - For `vendor=codex`, do not pass Claude selectors (`claude-*`, `opus`, `sonnet`, `haiku`) into `--model`; those are rejected by policy.
 - If Codex quota/token is exhausted and user wants Claude Opus/Sonnet fallback, prefer cross-vendor failover:
   `ccb failover --from codex:default --to claude:default --model claude-opus-4-6`
+- Before executing failover, run preflight first:
+  `ccb preflight --from codex:default --to claude:default --model claude-opus-4-6`
 - For existing failover targets, `ccb` validates target settings binding/policy before mutation; if target binding is mismatched, failover is blocked without changing target config/state.
 - `failover` also validates source-active snapshot at switch time; if another command changed active scope concurrently, failover aborts and rollback avoids clobbering that external active change.
+- For multi-agent/operator transfer, generate handoff bundle first:
+  `ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md`
 - If only cleanup is required (no scope switch), use:
   `ccb setup --vendor "$VENDOR" --profile "$PROFILE" --runtime-mode native-cleanup` and re-check with `ccb doctor --vendor "$VENDOR" --profile "$PROFILE"`.
 

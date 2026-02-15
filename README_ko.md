@@ -207,6 +207,7 @@ native cleanup 이후에는 Claude Code native 경로에서 `claude-opus-4-6` �
 ### 10) 크로스 벤더 failover (원샷)
 
 ```bash
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
 ccb failover --from codex:default --to claude:default --model claude-opus-4-6
 ```
 
@@ -214,7 +215,27 @@ ccb failover --from codex:default --to claude:default --model claude-opus-4-6
 기존 target 스코프에 대해서는 설정 바인딩/정책 검증을 변경 전에 먼저 수행하므로, 바인딩 불일치 시 target config/state를 바꾸지 않고 즉시 차단됩니다.
 또한 전환 시점에 source active 스냅샷 일치 여부를 다시 검증하여, 동시성으로 source active가 바뀌면 failover를 중단하고 외부 active 변경을 덮어쓰지 않도록 롤백합니다.
 
-### 11) 복원 및 제거 (선택)
+### 11) 컨텍스트 차이 완화용 preflight/handoff
+
+`preflight`는 failover 전 점검 게이트입니다.
+
+- blocking check: failover 전에 반드시 해결해야 하는 항목
+- warning: 참고 신호(예: route/tool integrity)
+
+```bash
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
+```
+
+멀티 에이전트/운영자 인수인계를 위해 실행 번들을 만들 수 있습니다.
+
+```bash
+ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
+```
+
+`handoff create`는 scope/service를 변경하지 않고, `preflight -> failover -> doctor` 실행 순서를 markdown/JSON으로 정리합니다.
+
+### 12) 복원 및 제거 (선택)
 
 ```bash
 ccb claude revert --vendor codex --profile default
@@ -257,6 +278,9 @@ ccb service status --active
 ccb doctor --vendor codex --profile default
 ccb doctor --active
 ccb doctor --vendor codex --profile default --verbose
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
+ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
 ```
 
 백엔드 런타임 엔트리포인트(스코프 플래그 없음, builtin 래퍼가 사용):

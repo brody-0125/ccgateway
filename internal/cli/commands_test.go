@@ -2981,6 +2981,101 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 	}
 }
 
+func TestPreflightCodexToClaudeReturnsNoBlockingFailures(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap codex failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "claude", "--profile", "default", "--runtime-mode", "native-direct"}); err != nil {
+		t.Fatalf("bootstrap claude failed: %v", err)
+	}
+
+	err = app.cmdPreflight([]string{
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	})
+	if err != nil {
+		t.Fatalf("preflight should pass with advisory warnings only: %v", err)
+	}
+}
+
+func TestPreflightBlocksInvalidTargetModelPolicy(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "backup"}); err != nil {
+		t.Fatalf("bootstrap target failed: %v", err)
+	}
+
+	err = app.cmdPreflight([]string{
+		"--from", "codex:default",
+		"--to", "codex:backup",
+		"--model", "claude-opus-4-6",
+	})
+	if err == nil {
+		t.Fatal("expected preflight failure for invalid codex target model")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchValidation {
+		t.Fatalf("unexpected preflight error code: %s (%v)", code, err)
+	}
+}
+
+func TestHandoffCreateWritesMarkdownBundle(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap codex failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "claude", "--profile", "default", "--runtime-mode", "native-direct"}); err != nil {
+		t.Fatalf("bootstrap claude failed: %v", err)
+	}
+
+	outPath := filepath.Join(tmpHome, "handoff.md")
+	if err := app.cmdHandoff([]string{
+		"create",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+		"--output", outPath,
+	}); err != nil {
+		t.Fatalf("handoff create failed: %v", err)
+	}
+
+	body, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read handoff bundle failed: %v", err)
+	}
+	text := string(body)
+	if !strings.Contains(text, "# ccgateway failover handoff") {
+		t.Fatalf("unexpected handoff heading: %s", text)
+	}
+	if !strings.Contains(text, "ccb failover --from codex:default --to claude:default --model claude-opus-4-6") {
+		t.Fatalf("expected failover command in handoff bundle, got: %s", text)
+	}
+}
+
 type noopBackendProxyRenderer struct{}
 
 func (noopBackendProxyRenderer) WriteProxyConfig(_ context.Context, rt backend.Runtime) error {

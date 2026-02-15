@@ -14,6 +14,9 @@ All notable changes to this project are documented in this file.
   - expected-active guard enforcement in `use`
   - `model switch` concurrent active change rollback safety
   - `failover` concurrent source-active change rollback safety
+- `ccb preflight --from <scope> --to <scope> [--model <name>] [--json]` transition gate command to classify blocking checks vs advisory warnings before failover.
+- `ccb handoff create --from <scope> --to <scope> [--model <name>] [--output <path>] [--json]` bundle command for operator/agent transfer with recommended `preflight -> failover -> doctor` sequence.
+- CLI tests for preflight and handoff bundle generation.
 
 ### Changed
 
@@ -21,6 +24,7 @@ All notable changes to this project are documented in this file.
 - Existing failover targets are now validated (policy/settings binding/provider/runtime constraints) before bootstrap mutation.
 - `model switch` now verifies active pointer/generation contract at transaction tail before commit success.
 - `failover` switch stage now enforces an expected-active contract at switch time (source-active atomicity guard).
+- Docs now include context-gap mitigation flow (`preflight`, `handoff create`) for Codex->Claude fallback operations.
 
 ### Fixed
 

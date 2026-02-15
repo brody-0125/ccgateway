@@ -206,6 +206,7 @@ After native cleanup, select/use Claude-native model (for example `claude-opus-4
 ### 10) Cross-vendor failover (one-shot)
 
 ```bash
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
 ccb failover --from codex:default --to claude:default --model claude-opus-4-6
 ```
 
@@ -213,7 +214,27 @@ ccb failover --from codex:default --to claude:default --model claude-opus-4-6
 For existing target scopes, settings binding/policy validation now runs before mutation; if binding is mismatched, failover is blocked without changing target config/state.
 `failover` switch stage also validates the source active snapshot at switch time; if source active changed concurrently, failover aborts and rolls back without clobbering external active changes.
 
-### 11) Revert and uninstall (optional)
+### 11) Context-gap preflight and handoff bundle
+
+`preflight` is a failover gate that distinguishes:
+
+- blocking checks (must pass before failover)
+- warnings (advisory signals like route/tool integrity)
+
+```bash
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
+```
+
+For multi-agent/operator handoff, generate a ready-to-run bundle:
+
+```bash
+ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
+```
+
+`handoff create` does not mutate scopes/services. It packages preflight checks and next commands (`preflight -> failover -> doctor`) into markdown or JSON.
+
+### 12) Revert and uninstall (optional)
 
 ```bash
 ccb claude revert --vendor codex --profile default
@@ -256,6 +277,9 @@ ccb service status --active
 ccb doctor --vendor codex --profile default
 ccb doctor --active
 ccb doctor --vendor codex --profile default --verbose
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
+ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
+ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
 ```
 
 Backend runtime entrypoint (no scope flags, used by builtin wrapper):

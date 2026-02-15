@@ -1,0 +1,8 @@
+# Binaries
+/ccb
+
+# macOS
+.DS_Store
+
+# Private docs
+/.docs/
