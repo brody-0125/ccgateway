@@ -1,0 +1,2 @@
+8db2400dffcd38d5ebaf5674b8ebc3d4a70fc5a0be509784bc1b23a589da3598  dist/ccgateway_0.1.0_darwin_amd64.tar.gz
+3915af6d52951f978dbf1fba3c6d9f980784c6962e0605bef9d203fd38a76895  dist/ccgateway_0.1.0_darwin_arm64.tar.gz
