@@ -1941,8 +1941,10 @@ func TestCurrentUsernameFallbackMatchesScopeCurrentUserFallback(t *testing.T) {
 	ref := scope.MustRef("codex", "default")
 	paths := scope.BuildPaths(app.home, app.cwd, ref)
 	proxyLabel, _ := ref.Labels(app.username)
-	if !strings.HasSuffix(paths.ProxyPlistPath, proxyLabel+".plist") {
-		t.Fatalf("launchd label mismatch: path=%s label=%s", paths.ProxyPlistPath, proxyLabel)
+	// ProxyPlistPath ends with the label plus platform-specific extension
+	// (.plist on macOS, .service on Linux).
+	if !strings.Contains(paths.ProxyPlistPath, proxyLabel) {
+		t.Fatalf("service unit label mismatch: path=%s label=%s", paths.ProxyPlistPath, proxyLabel)
 	}
 }
 
@@ -2884,13 +2886,12 @@ func TestFailoverRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 	}
 
 	proxyLabel, syncLabel := targetRef.Labels(app.username)
-	proxyPlist := filepath.Join(targetPaths.LaunchAgentDir, proxyLabel+".plist")
-	syncPlist := filepath.Join(targetPaths.LaunchAgentDir, syncLabel+".plist")
-	if _, statErr := os.Stat(proxyPlist); !os.IsNotExist(statErr) {
-		t.Fatalf("expected proxy plist cleanup after rollback, stat err=%v", statErr)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(app.home, targetPaths.ProxyPlistPath, targetPaths.SyncPlistPath, proxyLabel, syncLabel)
+	if _, statErr := os.Stat(proxyUnitPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected proxy unit cleanup after rollback, stat err=%v", statErr)
 	}
-	if _, statErr := os.Stat(syncPlist); !os.IsNotExist(statErr) {
-		t.Fatalf("expected sync plist cleanup after rollback, stat err=%v", statErr)
+	if _, statErr := os.Stat(syncUnitPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected sync unit cleanup after rollback, stat err=%v", statErr)
 	}
 }
 
@@ -4029,13 +4030,12 @@ func TestScopeSwitchRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 	}
 
 	proxyLabel, syncLabel := targetRef.Labels(app.username)
-	proxyPlist := filepath.Join(targetPaths.LaunchAgentDir, proxyLabel+".plist")
-	syncPlist := filepath.Join(targetPaths.LaunchAgentDir, syncLabel+".plist")
-	if _, statErr := os.Stat(proxyPlist); !os.IsNotExist(statErr) {
-		t.Fatalf("expected proxy plist cleanup after rollback, stat err=%v", statErr)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(app.home, targetPaths.ProxyPlistPath, targetPaths.SyncPlistPath, proxyLabel, syncLabel)
+	if _, statErr := os.Stat(proxyUnitPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected proxy unit cleanup after rollback, stat err=%v", statErr)
 	}
-	if _, statErr := os.Stat(syncPlist); !os.IsNotExist(statErr) {
-		t.Fatalf("expected sync plist cleanup after rollback, stat err=%v", statErr)
+	if _, statErr := os.Stat(syncUnitPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected sync unit cleanup after rollback, stat err=%v", statErr)
 	}
 }
 

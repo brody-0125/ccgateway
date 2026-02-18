@@ -83,3 +83,53 @@ func TestInstallAcceptsLinux(t *testing.T) {
 		t.Fatalf("linux should be accepted, got ErrInvalidArgs: %v", err)
 	}
 }
+
+func TestFindAssetsMatchesLinuxSuffix(t *testing.T) {
+	assets := []releaseAsset{
+		{Name: "cli-proxy-api_0.1.0_darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/darwin_arm64.tar.gz"},
+		{Name: "cli-proxy-api_0.1.0_linux_amd64.tar.gz", BrowserDownloadURL: "https://example.com/linux_amd64.tar.gz"},
+		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums.txt"},
+	}
+
+	tar, checksums := findAssets(assets, "linux_amd64.tar.gz")
+	if tar == nil {
+		t.Fatal("expected linux tar asset to be found")
+	}
+	if tar.Name != "cli-proxy-api_0.1.0_linux_amd64.tar.gz" {
+		t.Fatalf("unexpected tar name: %s", tar.Name)
+	}
+	if checksums == nil {
+		t.Fatal("expected checksums asset to be found")
+	}
+}
+
+func TestFindAssetsMatchesDarwinSuffix(t *testing.T) {
+	assets := []releaseAsset{
+		{Name: "cli-proxy-api_0.1.0_darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/darwin_arm64.tar.gz"},
+		{Name: "cli-proxy-api_0.1.0_linux_amd64.tar.gz", BrowserDownloadURL: "https://example.com/linux_amd64.tar.gz"},
+		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums.txt"},
+	}
+
+	tar, checksums := findAssets(assets, "darwin_arm64.tar.gz")
+	if tar == nil {
+		t.Fatal("expected darwin tar asset to be found")
+	}
+	if tar.Name != "cli-proxy-api_0.1.0_darwin_arm64.tar.gz" {
+		t.Fatalf("unexpected tar name: %s", tar.Name)
+	}
+	if checksums == nil {
+		t.Fatal("expected checksums asset to be found")
+	}
+}
+
+func TestFindAssetsReturnsNilForMissingSuffix(t *testing.T) {
+	assets := []releaseAsset{
+		{Name: "cli-proxy-api_0.1.0_darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/darwin_arm64.tar.gz"},
+		{Name: "checksums.txt", BrowserDownloadURL: "https://example.com/checksums.txt"},
+	}
+
+	tar, _ := findAssets(assets, "linux_amd64.tar.gz")
+	if tar != nil {
+		t.Fatalf("expected nil for missing linux asset, got: %s", tar.Name)
+	}
+}
