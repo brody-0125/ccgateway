@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"ccgateway/internal/backend"
-	"ccgateway/internal/launchd"
+	"ccgateway/internal/proxy"
 	"ccgateway/internal/state"
 )
 
@@ -67,7 +67,7 @@ func (proxyRenderer) WriteProxyConfig(_ context.Context, rt backend.Runtime) err
 }
 
 func (proxyRenderer) WriteSyncScript(_ context.Context, rt backend.Runtime, executablePath string) error {
-	return launchd.WriteSyncScript(rt.Paths.SyncScriptPath, executablePath, rt.Ref.VendorID, rt.Ref.ProfileID)
+	return proxy.WriteSyncScript(rt.Paths.SyncScriptPath, executablePath, rt.Ref.VendorID, rt.Ref.ProfileID)
 }
 
 func (healthChecker) Check(_ context.Context, rt backend.Runtime) error {

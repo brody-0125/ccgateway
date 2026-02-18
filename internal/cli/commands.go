@@ -352,7 +352,7 @@ func (a *application) cleanupGatewayRuntime(ref scope.Ref) error {
 	}
 	mgr := service.NewManager()
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyUnitPath, syncUnitPath := serviceUnitPaths(rt.Paths, proxyLabel, syncLabel)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
 	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to cleanup existing services", err)
 	}
@@ -1198,7 +1198,7 @@ func (a *application) cmdStatus(args []string) error {
 	policyEval := policyguard.Evaluate(rt.Paths, rt.Config)
 	policyOK := policyEval.Mode != policyguard.ModeStrict || len(policyEval.Violations) == 0
 
-	svcMgr := service.NewManager()
+	mgr := service.NewManager()
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
 	proxyLoaded := false
 	syncLoaded := false
@@ -1206,7 +1206,7 @@ func (a *application) cmdStatus(args []string) error {
 	healthOK := false
 	healthDetail := ""
 	if isGatewayProxyMode(rt) {
-		status, statusErr := svcMgr.Status(proxyLabel, syncLabel)
+		status, statusErr := mgr.Status(proxyLabel, syncLabel)
 		if statusErr != nil {
 			healthDetail = fmt.Sprintf("service status error: %v", statusErr)
 		} else {
@@ -2724,9 +2724,9 @@ func (a *application) cmdUninstall(args []string) error {
 	}
 
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyUnitPath, syncUnitPath := serviceUnitPaths(rt.Paths, proxyLabel, syncLabel)
-	svcMgr := service.NewManager()
-	if err := svcMgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
+	mgr := service.NewManager()
+	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to remove services", err)
 	}
 
@@ -3292,9 +3292,6 @@ func serviceLabelsForRuntime(rt runtime, username string) (string, string) {
 	return rt.Ref.Labels(username)
 }
 
-func serviceUnitPaths(paths scope.Paths, proxyLabel, syncLabel string) (string, string) {
-	return service.UnitPaths(paths.Home, paths.ProxyPlistPath, paths.SyncPlistPath, proxyLabel, syncLabel)
-}
 
 func allowSettingsMutation(active control.ActivePointer, ref scope.Ref, generation string) bool {
 	// Older active pointers may not have generation tracking. In that case, still require scope identity.
@@ -3671,10 +3668,10 @@ func (r *targetScopeRestorer) restore() error {
 	r.restored = true
 	var restoreErrs []error
 	if r.rollbackTargetRT != nil && isGatewayProxyMode(*r.rollbackTargetRT) {
-		svcMgr := service.NewManager()
+		mgr := service.NewManager()
 		proxyLabel, syncLabel := serviceLabelsForRuntime(*r.rollbackTargetRT, r.app.username)
-		proxyUnitPath, syncUnitPath := serviceUnitPaths(r.rollbackTargetRT.Paths, proxyLabel, syncLabel)
-		if err := svcMgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
+		proxyUnitPath, syncUnitPath := service.UnitPaths(r.app.home, r.rollbackTargetRT.Paths.ProxyPlistPath, r.rollbackTargetRT.Paths.SyncPlistPath, proxyLabel, syncLabel)
+		if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 			restoreErrs = append(restoreErrs, fmt.Errorf("failed to cleanup target services: %w", err))
 		}
 	}

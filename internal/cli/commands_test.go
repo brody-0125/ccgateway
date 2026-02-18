@@ -54,7 +54,7 @@ func TestPromptWithDefault(t *testing.T) {
 	}
 }
 
-func TestServiceUnitPathsPreferRuntimeLabels(t *testing.T) {
+func TestUnitPathsPreferRuntimeLabels(t *testing.T) {
 	tmpHome := t.TempDir()
 	tmpCwd := filepath.Join(tmpHome, "repo")
 	if err := os.MkdirAll(tmpCwd, 0o755); err != nil {
@@ -62,17 +62,22 @@ func TestServiceUnitPathsPreferRuntimeLabels(t *testing.T) {
 	}
 	paths := scope.BuildPaths(tmpHome, tmpCwd, scope.MustRef("codex", "default"))
 
-	proxyPath, syncPath := serviceUnitPaths(paths, "com.real.proxy", "com.real.sync")
-	wantProxy, wantSync := service.UnitPaths(tmpHome, paths.ProxyPlistPath, paths.SyncPlistPath, "com.real.proxy", "com.real.sync")
-	if proxyPath != wantProxy {
-		t.Fatalf("unexpected proxy unit path: got=%s want=%s", proxyPath, wantProxy)
+	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyPlistPath, paths.SyncPlistPath, "com.real.proxy", "com.real.sync")
+	if proxyPath == paths.ProxyPlistPath {
+		t.Fatal("expected proxyPath to differ from default when label is provided")
 	}
-	if syncPath != wantSync {
-		t.Fatalf("unexpected sync unit path: got=%s want=%s", syncPath, wantSync)
+	if syncPath == paths.SyncPlistPath {
+		t.Fatal("expected syncPath to differ from default when label is provided")
+	}
+	if !strings.Contains(proxyPath, "com.real.proxy") {
+		t.Fatalf("expected proxyPath to contain label, got=%s", proxyPath)
+	}
+	if !strings.Contains(syncPath, "com.real.sync") {
+		t.Fatalf("expected syncPath to contain label, got=%s", syncPath)
 	}
 }
 
-func TestServiceUnitPathsFallbackWhenLabelsEmpty(t *testing.T) {
+func TestUnitPathsFallbackWhenLabelsEmpty(t *testing.T) {
 	tmpHome := t.TempDir()
 	tmpCwd := filepath.Join(tmpHome, "repo")
 	if err := os.MkdirAll(tmpCwd, 0o755); err != nil {
@@ -80,7 +85,7 @@ func TestServiceUnitPathsFallbackWhenLabelsEmpty(t *testing.T) {
 	}
 	paths := scope.BuildPaths(tmpHome, tmpCwd, scope.MustRef("codex", "default"))
 
-	proxyPath, syncPath := serviceUnitPaths(paths, "", "")
+	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyPlistPath, paths.SyncPlistPath, "", "")
 	if proxyPath != paths.ProxyPlistPath {
 		t.Fatalf("expected proxy fallback path=%s, got=%s", paths.ProxyPlistPath, proxyPath)
 	}
