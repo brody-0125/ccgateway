@@ -21,15 +21,15 @@ func (d *darwinManager) Install(files ServiceFiles) error {
 	return d.mgr.InstallAgents(launchd.AgentFiles{
 		ProxyUnitPath: files.ProxyUnitPath,
 		SyncUnitPath:  files.SyncUnitPath,
-		ProxyBinary:    files.ProxyBinary,
-		ProxyConfig:    files.ProxyConfig,
-		ProxyLog:       files.ProxyLog,
-		SyncLog:        files.SyncLog,
-		SyncScript:     files.SyncScript,
-		AuthSource:     files.AuthSource,
-		HomeDir:        files.HomeDir,
-		ProxyLabel:     files.ProxyLabel,
-		SyncLabel:      files.SyncLabel,
+		ProxyBinary:   files.ProxyBinary,
+		ProxyConfig:   files.ProxyConfig,
+		ProxyLog:      files.ProxyLog,
+		SyncLog:       files.SyncLog,
+		SyncScript:    files.SyncScript,
+		AuthSource:    files.AuthSource,
+		HomeDir:       files.HomeDir,
+		ProxyLabel:    files.ProxyLabel,
+		SyncLabel:     files.SyncLabel,
 	})
 }
 

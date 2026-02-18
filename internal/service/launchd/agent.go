@@ -25,15 +25,15 @@ type ServiceStatus struct {
 type AgentFiles struct {
 	ProxyUnitPath string
 	SyncUnitPath  string
-	ProxyBinary    string
-	ProxyConfig    string
-	ProxyLog       string
-	SyncLog        string
-	SyncScript     string
-	AuthSource     string
-	HomeDir        string
-	ProxyLabel     string
-	SyncLabel      string
+	ProxyBinary   string
+	ProxyConfig   string
+	ProxyLog      string
+	SyncLog       string
+	SyncScript    string
+	AuthSource    string
+	HomeDir       string
+	ProxyLabel    string
+	SyncLabel     string
 }
 
 func NewManager() *Manager {

@@ -26,15 +26,15 @@ func TestInstallAgentsCleansUpOnProxyBootstrapFailure(t *testing.T) {
 	files := AgentFiles{
 		ProxyUnitPath: proxyPlistPath,
 		SyncUnitPath:  syncPlistPath,
-		ProxyBinary:    filepath.Join(tmp, "proxy", "cli-proxy-api"),
-		ProxyConfig:    filepath.Join(tmp, "proxy", "config.yaml"),
-		ProxyLog:       filepath.Join(tmp, "logs", "proxy.log"),
-		SyncLog:        filepath.Join(tmp, "logs", "sync.log"),
-		SyncScript:     filepath.Join(tmp, "launchd", "sync.sh"),
-		AuthSource:     filepath.Join(tmp, "auth.json"),
-		HomeDir:        tmp,
-		ProxyLabel:     "com.test.proxy",
-		SyncLabel:      "com.test.sync",
+		ProxyBinary:   filepath.Join(tmp, "proxy", "cli-proxy-api"),
+		ProxyConfig:   filepath.Join(tmp, "proxy", "config.yaml"),
+		ProxyLog:      filepath.Join(tmp, "logs", "proxy.log"),
+		SyncLog:       filepath.Join(tmp, "logs", "sync.log"),
+		SyncScript:    filepath.Join(tmp, "launchd", "sync.sh"),
+		AuthSource:    filepath.Join(tmp, "auth.json"),
+		HomeDir:       tmp,
+		ProxyLabel:    "com.test.proxy",
+		SyncLabel:     "com.test.sync",
 	}
 
 	err := mgr.InstallAgents(files)

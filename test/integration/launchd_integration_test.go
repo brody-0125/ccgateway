@@ -25,15 +25,15 @@ func TestLaunchdManagerWithStub(t *testing.T) {
 	files := launchd.AgentFiles{
 		ProxyUnitPath: filepath.Join(dir, "proxy.plist"),
 		SyncUnitPath:  filepath.Join(dir, "sync.plist"),
-		ProxyBinary:    "/tmp/cli-proxy-api",
-		ProxyConfig:    filepath.Join(dir, "proxy.yaml"),
-		ProxyLog:       filepath.Join(dir, "proxy.log"),
-		SyncLog:        filepath.Join(dir, "sync.log"),
-		SyncScript:     filepath.Join(dir, "sync.sh"),
-		AuthSource:     filepath.Join(dir, "auth.json"),
-		HomeDir:        dir,
-		ProxyLabel:     "com.test.proxy",
-		SyncLabel:      "com.test.sync",
+		ProxyBinary:   "/tmp/cli-proxy-api",
+		ProxyConfig:   filepath.Join(dir, "proxy.yaml"),
+		ProxyLog:      filepath.Join(dir, "proxy.log"),
+		SyncLog:       filepath.Join(dir, "sync.log"),
+		SyncScript:    filepath.Join(dir, "sync.sh"),
+		AuthSource:    filepath.Join(dir, "auth.json"),
+		HomeDir:       dir,
+		ProxyLabel:    "com.test.proxy",
+		SyncLabel:     "com.test.sync",
 	}
 	if err := os.WriteFile(files.AuthSource, []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write auth source: %v", err)
