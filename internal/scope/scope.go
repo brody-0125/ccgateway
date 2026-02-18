@@ -40,9 +40,9 @@ type Paths struct {
 	LaunchdDir     string
 	SyncScriptPath string
 
-	LaunchAgentDir string
-	ProxyPlistPath string
-	SyncPlistPath  string
+	ServiceUnitDir string
+	ProxyUnitPath  string
+	SyncUnitPath   string
 
 	ClaudeUserSettingsPath    string
 	ClaudeProjectSettingsPath string
@@ -133,9 +133,9 @@ func BuildPaths(home, cwd string, r Ref) Paths {
 		LaunchdDir:     filepath.Join(scopeDir, "launchd"),
 		SyncScriptPath: filepath.Join(scopeDir, "launchd", "sync.sh"),
 
-		LaunchAgentDir: serviceUnitDir,
-		ProxyPlistPath: proxyUnitPath,
-		SyncPlistPath:  syncUnitPath,
+		ServiceUnitDir: serviceUnitDir,
+		ProxyUnitPath:  proxyUnitPath,
+		SyncUnitPath:   syncUnitPath,
 
 		ClaudeUserSettingsPath:    filepath.Join(home, ".claude", "settings.json"),
 		ClaudeProjectSettingsPath: filepath.Join(cwd, ".claude", "settings.json"),

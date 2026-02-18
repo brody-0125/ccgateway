@@ -352,7 +352,7 @@ func (a *application) cleanupGatewayRuntime(ref scope.Ref) error {
 	}
 	mgr := service.NewManager()
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyUnitPath, rt.Paths.SyncUnitPath, proxyLabel, syncLabel)
 	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to cleanup existing services", err)
 	}
@@ -789,7 +789,7 @@ func (a *application) cmdService(args []string) error {
 	}
 	mgr := service.NewManager()
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyUnitPath, rt.Paths.SyncUnitPath, proxyLabel, syncLabel)
 	if err := requireGatewayProxyMode(rt, "service command"); err != nil {
 		return err
 	}
@@ -2724,7 +2724,7 @@ func (a *application) cmdUninstall(args []string) error {
 	}
 
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyUnitPath, rt.Paths.SyncUnitPath, proxyLabel, syncLabel)
 	mgr := service.NewManager()
 	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to remove services", err)
@@ -3076,7 +3076,7 @@ func ensureDirs(paths scope.Paths) error {
 		paths.SnapshotsDir,
 		paths.ProxyDir,
 		paths.LaunchdDir,
-		paths.LaunchAgentDir,
+		paths.ServiceUnitDir,
 	} {
 		if err := os.MkdirAll(p, 0o755); err != nil {
 			return err
@@ -3670,7 +3670,7 @@ func (r *targetScopeRestorer) restore() error {
 	if r.rollbackTargetRT != nil && isGatewayProxyMode(*r.rollbackTargetRT) {
 		mgr := service.NewManager()
 		proxyLabel, syncLabel := serviceLabelsForRuntime(*r.rollbackTargetRT, r.app.username)
-		proxyUnitPath, syncUnitPath := service.UnitPaths(r.app.home, r.rollbackTargetRT.Paths.ProxyPlistPath, r.rollbackTargetRT.Paths.SyncPlistPath, proxyLabel, syncLabel)
+		proxyUnitPath, syncUnitPath := service.UnitPaths(r.app.home, r.rollbackTargetRT.Paths.ProxyUnitPath, r.rollbackTargetRT.Paths.SyncUnitPath, proxyLabel, syncLabel)
 		if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 			restoreErrs = append(restoreErrs, fmt.Errorf("failed to cleanup target services: %w", err))
 		}

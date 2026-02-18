@@ -62,11 +62,11 @@ func TestUnitPathsPreferRuntimeLabels(t *testing.T) {
 	}
 	paths := scope.BuildPaths(tmpHome, tmpCwd, scope.MustRef("codex", "default"))
 
-	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyPlistPath, paths.SyncPlistPath, "com.real.proxy", "com.real.sync")
-	if proxyPath == paths.ProxyPlistPath {
+	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyUnitPath, paths.SyncUnitPath, "com.real.proxy", "com.real.sync")
+	if proxyPath == paths.ProxyUnitPath {
 		t.Fatal("expected proxyPath to differ from default when label is provided")
 	}
-	if syncPath == paths.SyncPlistPath {
+	if syncPath == paths.SyncUnitPath {
 		t.Fatal("expected syncPath to differ from default when label is provided")
 	}
 	if !strings.Contains(proxyPath, "com.real.proxy") {
@@ -85,12 +85,12 @@ func TestUnitPathsFallbackWhenLabelsEmpty(t *testing.T) {
 	}
 	paths := scope.BuildPaths(tmpHome, tmpCwd, scope.MustRef("codex", "default"))
 
-	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyPlistPath, paths.SyncPlistPath, "", "")
-	if proxyPath != paths.ProxyPlistPath {
-		t.Fatalf("expected proxy fallback path=%s, got=%s", paths.ProxyPlistPath, proxyPath)
+	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyUnitPath, paths.SyncUnitPath, "", "")
+	if proxyPath != paths.ProxyUnitPath {
+		t.Fatalf("expected proxy fallback path=%s, got=%s", paths.ProxyUnitPath, proxyPath)
 	}
-	if syncPath != paths.SyncPlistPath {
-		t.Fatalf("expected sync fallback path=%s, got=%s", paths.SyncPlistPath, syncPath)
+	if syncPath != paths.SyncUnitPath {
+		t.Fatalf("expected sync fallback path=%s, got=%s", paths.SyncUnitPath, syncPath)
 	}
 }
 
@@ -1946,10 +1946,10 @@ func TestCurrentUsernameFallbackMatchesScopeCurrentUserFallback(t *testing.T) {
 	ref := scope.MustRef("codex", "default")
 	paths := scope.BuildPaths(app.home, app.cwd, ref)
 	proxyLabel, _ := ref.Labels(app.username)
-	// ProxyPlistPath ends with the label plus platform-specific extension
+	// ProxyUnitPath ends with the label plus platform-specific extension
 	// (.plist on macOS, .service on Linux).
-	if !strings.Contains(paths.ProxyPlistPath, proxyLabel) {
-		t.Fatalf("service unit label mismatch: path=%s label=%s", paths.ProxyPlistPath, proxyLabel)
+	if !strings.Contains(paths.ProxyUnitPath, proxyLabel) {
+		t.Fatalf("service unit label mismatch: path=%s label=%s", paths.ProxyUnitPath, proxyLabel)
 	}
 }
 
@@ -2891,7 +2891,7 @@ func TestFailoverRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 	}
 
 	proxyLabel, syncLabel := targetRef.Labels(app.username)
-	proxyUnitPath, syncUnitPath := service.UnitPaths(app.home, targetPaths.ProxyPlistPath, targetPaths.SyncPlistPath, proxyLabel, syncLabel)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(app.home, targetPaths.ProxyUnitPath, targetPaths.SyncUnitPath, proxyLabel, syncLabel)
 	if _, statErr := os.Stat(proxyUnitPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected proxy unit cleanup after rollback, stat err=%v", statErr)
 	}
@@ -4035,7 +4035,7 @@ func TestScopeSwitchRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 	}
 
 	proxyLabel, syncLabel := targetRef.Labels(app.username)
-	proxyUnitPath, syncUnitPath := service.UnitPaths(app.home, targetPaths.ProxyPlistPath, targetPaths.SyncPlistPath, proxyLabel, syncLabel)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(app.home, targetPaths.ProxyUnitPath, targetPaths.SyncUnitPath, proxyLabel, syncLabel)
 	if _, statErr := os.Stat(proxyUnitPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected proxy unit cleanup after rollback, stat err=%v", statErr)
 	}

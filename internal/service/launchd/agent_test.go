@@ -24,8 +24,8 @@ func TestInstallAgentsCleansUpOnProxyBootstrapFailure(t *testing.T) {
 
 	mgr := &Manager{UID: os.Getuid(), LaunchctlBin: stubPath}
 	files := AgentFiles{
-		ProxyPlistPath: proxyPlistPath,
-		SyncPlistPath:  syncPlistPath,
+		ProxyUnitPath: proxyPlistPath,
+		SyncUnitPath:  syncPlistPath,
 		ProxyBinary:    filepath.Join(tmp, "proxy", "cli-proxy-api"),
 		ProxyConfig:    filepath.Join(tmp, "proxy", "config.yaml"),
 		ProxyLog:       filepath.Join(tmp, "logs", "proxy.log"),

@@ -19,8 +19,8 @@ func newDarwinManager() Manager {
 
 func (d *darwinManager) Install(files ServiceFiles) error {
 	return d.mgr.InstallAgents(launchd.AgentFiles{
-		ProxyPlistPath: files.ProxyUnitPath,
-		SyncPlistPath:  files.SyncUnitPath,
+		ProxyUnitPath: files.ProxyUnitPath,
+		SyncUnitPath:  files.SyncUnitPath,
 		ProxyBinary:    files.ProxyBinary,
 		ProxyConfig:    files.ProxyConfig,
 		ProxyLog:       files.ProxyLog,
