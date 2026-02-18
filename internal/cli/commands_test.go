@@ -3076,6 +3076,403 @@ func TestHandoffCreateWritesMarkdownBundle(t *testing.T) {
 	}
 }
 
+func TestScopeSwitchCodexToClaudeNativeDirectSuccess(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	fromRef := scope.MustRef("codex", "default")
+	if err := app.cmdBootstrap([]string{"--vendor", fromRef.VendorID, "--profile", fromRef.ProfileID}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("scope switch failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(tmpHome, tmpHome, fromRef)
+	active, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active failed: %v", err)
+	}
+	if active.ActiveVendor != "claude" || active.ActiveProfile != "default" {
+		t.Fatalf("unexpected active scope after scope switch: %+v", active)
+	}
+	if strings.TrimSpace(active.ActiveGeneration) == "" {
+		t.Fatalf("expected non-empty active generation after scope switch: %+v", active)
+	}
+
+	targetRef := scope.MustRef("claude", "default")
+	targetRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime failed: %v", err)
+	}
+	if targetRT.Config.RuntimeMode != config.RuntimeModeNativeDirect {
+		t.Fatalf("expected runtime_mode=%s, got %s", config.RuntimeModeNativeDirect, targetRT.Config.RuntimeMode)
+	}
+	if targetRT.Config.Model != "claude-opus-4-6" {
+		t.Fatalf("expected target model claude-opus-4-6, got %q", targetRT.Config.Model)
+	}
+	if !targetRT.State.Claude.Applied {
+		t.Fatalf("expected target state applied=true after scope switch: %+v", targetRT.State.Claude)
+	}
+	if targetRT.State.Claude.AppliedGeneration != active.ActiveGeneration {
+		t.Fatalf("expected generation sync: active=%s state=%s", active.ActiveGeneration, targetRT.State.Claude.AppliedGeneration)
+	}
+}
+
+func TestScopeSwitchDryRunDoesNotMutate(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	fromRef := scope.MustRef("codex", "default")
+	if err := app.cmdBootstrap([]string{"--vendor", fromRef.VendorID, "--profile", fromRef.ProfileID}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(tmpHome, tmpHome, fromRef)
+	activeBefore, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active before dry-run failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+		"--dry-run",
+	}); err != nil {
+		t.Fatalf("scope switch dry-run failed: %v", err)
+	}
+
+	activeAfter, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active after dry-run failed: %v", err)
+	}
+	if activeBefore.ActiveVendor != activeAfter.ActiveVendor || activeBefore.ActiveProfile != activeAfter.ActiveProfile {
+		t.Fatalf("dry-run mutated active pointer: before=%+v after=%+v", activeBefore, activeAfter)
+	}
+
+	targetPaths := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("claude", "default"))
+	if _, statErr := os.Stat(targetPaths.ScopeDir); !os.IsNotExist(statErr) {
+		t.Fatalf("dry-run should not create target scope, stat err=%v", statErr)
+	}
+}
+
+func TestScopeSwitchRejectsInactiveSource(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap codex failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "claude", "--profile", "default", "--runtime-mode", "native-direct"}); err != nil {
+		t.Fatalf("bootstrap claude failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "claude:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch to reject inactive source")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchValidation {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsBadModel(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "codex:backup",
+		"--model", "claude-opus-4-6",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch to reject claude model for codex target")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRollsBackOnDoctorFailure(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	var revertCalls int32
+	reg := provider.NewRegistry()
+	if err := reg.Register(providercodex.NewBundle()); err != nil {
+		t.Fatalf("register codex provider failed: %v", err)
+	}
+	if err := reg.Register(provider.Bundle{
+		VendorID:     "claude",
+		RuntimeModes: []string{string(config.RuntimeModeNativeDirect)},
+		Capabilities: map[provider.Capability]bool{
+			provider.CapabilityClaude: true,
+		},
+		Claude: &countingClaudePatcher{revertCalls: &revertCalls},
+	}); err != nil {
+		t.Fatalf("register claude provider failed: %v", err)
+	}
+
+	app := &application{
+		home:            tmpHome,
+		cwd:             tmpHome,
+		username:        "tester",
+		registry:        reg,
+		backendRegistry: backends.DefaultRegistry(),
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	settingsPath := filepath.Join(tmpHome, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir settings dir failed: %v", err)
+	}
+	originalSettings := []byte("{\n  \"env\": {\n    \"CUSTOM\": \"keep\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, originalSettings, 0o600); err != nil {
+		t.Fatalf("write original settings failed: %v", err)
+	}
+
+	err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch failure due doctor validation")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchValidation && code != cberr.ErrRollbackFailed {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+
+	activePath := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("codex", "default")).ActivePath
+	active, loadErr := control.LoadActive(activePath)
+	if loadErr != nil {
+		t.Fatalf("load active failed: %v", loadErr)
+	}
+	if active.ActiveVendor != "codex" || active.ActiveProfile != "default" {
+		t.Fatalf("expected active pointer restored to source scope, got: %+v", active)
+	}
+
+	targetScopeDir := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("claude", "default")).ScopeDir
+	if _, statErr := os.Stat(targetScopeDir); !os.IsNotExist(statErr) {
+		t.Fatalf("expected target scope rollback removal, stat err=%v", statErr)
+	}
+
+	restored, readErr := os.ReadFile(settingsPath)
+	if readErr != nil {
+		t.Fatalf("read restored settings failed: %v", readErr)
+	}
+	if string(restored) != string(originalSettings) {
+		t.Fatalf("expected settings restored after rollback\nwant:\n%s\ngot:\n%s", string(originalSettings), string(restored))
+	}
+	if atomic.LoadInt32(&revertCalls) == 0 {
+		t.Fatal("expected provider-specific revert to be invoked during scope switch rollback")
+	}
+}
+
+func TestScopeSwitchRoundtripCodexClaudeCodex(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: "stub-backend",
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	reg := provider.NewRegistry()
+	codexBundle := providercodex.NewBundle()
+	codexBundle.Auth = noopAuthStrategy{}
+	if err := reg.Register(codexBundle); err != nil {
+		t.Fatalf("register codex provider failed: %v", err)
+	}
+	if err := reg.Register(providerclaude.NewBundle()); err != nil {
+		t.Fatalf("register claude provider failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.registry = reg
+	app.backendRegistry = backendReg
+
+	if err := app.cmdSetup([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--runtime-mode", "gateway",
+		"--gateway-backend", "stub-backend",
+	}); err != nil {
+		t.Fatalf("codex setup failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("codex->claude scope switch failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "claude:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	}); err != nil {
+		t.Fatalf("claude->codex scope switch failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("codex", "default"))
+	active, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active failed: %v", err)
+	}
+	if active.ActiveVendor != "codex" || active.ActiveProfile != "default" {
+		t.Fatalf("unexpected active scope after roundtrip scope switch: %+v", active)
+	}
+	if strings.TrimSpace(active.ActiveGeneration) == "" {
+		t.Fatalf("expected non-empty active generation after roundtrip: %+v", active)
+	}
+}
+
+func TestScopeSwitchRejectsNativeCleanupTarget(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "cleanup", "--runtime-mode", "native-cleanup"}); err != nil {
+		t.Fatalf("bootstrap cleanup target failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "codex:cleanup",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch to reject native-cleanup target")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidConfig {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchExistingTargetPreservesConfig(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "claude", "--profile", "default", "--runtime-mode", "native-direct"}); err != nil {
+		t.Fatalf("bootstrap target failed: %v", err)
+	}
+
+	targetRef := scope.MustRef("claude", "default")
+	beforeRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime before switch failed: %v", err)
+	}
+	expectedMode := beforeRT.Config.RuntimeMode
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("scope switch failed: %v", err)
+	}
+
+	afterRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime after switch failed: %v", err)
+	}
+	if afterRT.Config.RuntimeMode != expectedMode {
+		t.Fatalf("expected runtime_mode preserved, got %s (want %s)", afterRT.Config.RuntimeMode, expectedMode)
+	}
+	if afterRT.Config.Model != "claude-opus-4-6" {
+		t.Fatalf("expected model updated, got %q", afterRT.Config.Model)
+	}
+}
+
 type noopBackendProxyRenderer struct{}
 
 func (noopBackendProxyRenderer) WriteProxyConfig(_ context.Context, rt backend.Runtime) error {
