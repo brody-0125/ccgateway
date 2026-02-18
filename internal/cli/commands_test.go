@@ -3473,6 +3473,297 @@ func TestScopeSwitchExistingTargetPreservesConfig(t *testing.T) {
 	}
 }
 
+func TestScopeSwitchRejectsNoArgs(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdScope([]string{}); err == nil {
+		t.Fatal("expected error for scope with no args")
+	}
+}
+
+func TestScopeSwitchRejectsInvalidSubcommand(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	err = app.cmdScope([]string{"foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown scope subcommand")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeCommandAcceptsDashHelp(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdScope([]string{"-h"}); err != nil {
+		t.Fatalf("scope -h should not error: %v", err)
+	}
+	if err := app.cmdScope([]string{"--help"}); err != nil {
+		t.Fatalf("scope --help should not error: %v", err)
+	}
+}
+
+func TestScopeSwitchRejectsMissingFromFlag(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch", "--to", "claude:default", "--model", "claude-opus-4-6"})
+	if err == nil {
+		t.Fatal("expected error for missing --from")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsMissingModelFlag(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch", "--from", "codex:default", "--to", "claude:default"})
+	if err == nil {
+		t.Fatal("expected error for missing --model")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsSameScope(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected error for same-scope switch")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"kickstart\" ]]; then\n  sleep 0.25\nfi\nif [[ \"${1:-}\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: config.DefaultGatewayBackend,
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.backendRegistry = backendReg
+
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "source",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "alt",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-sonnet-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap alt failed: %v", err)
+	}
+	if err := app.cmdUse([]string{"--vendor", "claude", "--profile", "source"}); err != nil {
+		t.Fatalf("use source failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(app.home, app.cwd, scope.MustRef("claude", "source"))
+	switchErrCh := make(chan error, 1)
+	go func() {
+		time.Sleep(60 * time.Millisecond)
+		other, err := newApplication()
+		if err != nil {
+			switchErrCh <- err
+			return
+		}
+		switchErrCh <- other.cmdUse([]string{"--vendor", "claude", "--profile", "alt"})
+	}()
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "claude:source",
+		"--to", "codex:target",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch failure under concurrent source active change")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchFailed && code != cberr.ErrRollbackFailed {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+	if switchErr := <-switchErrCh; switchErr != nil {
+		t.Fatalf("concurrent source switch failed: %v", switchErr)
+	}
+
+	active, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active failed: %v", err)
+	}
+	if active.ActiveVendor != "claude" || active.ActiveProfile != "alt" {
+		t.Fatalf("expected concurrent active scope to remain (claude:alt), got %+v", active)
+	}
+}
+
+func TestScopeSwitchRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".ccb.codex.target.\"* ]]; then\n    printf 'simulated target kickstart failure\\n' >&2\n    exit 91\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: config.DefaultGatewayBackend,
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.backendRegistry = backendReg
+
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "source",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdUse([]string{"--vendor", "claude", "--profile", "source"}); err != nil {
+		t.Fatalf("use source scope failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "claude:source",
+		"--to", "codex:target",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch failure from target gateway start error")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchFailed && code != cberr.ErrRollbackFailed {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+
+	targetRef := scope.MustRef("codex", "target")
+	targetPaths := scope.BuildPaths(app.home, app.cwd, targetRef)
+	if _, statErr := os.Stat(targetPaths.ScopeDir); !os.IsNotExist(statErr) {
+		t.Fatalf("expected target scope removal after rollback, stat err=%v", statErr)
+	}
+
+	proxyLabel, syncLabel := targetRef.Labels(app.username)
+	proxyPlist := filepath.Join(targetPaths.LaunchAgentDir, proxyLabel+".plist")
+	syncPlist := filepath.Join(targetPaths.LaunchAgentDir, syncLabel+".plist")
+	if _, statErr := os.Stat(proxyPlist); !os.IsNotExist(statErr) {
+		t.Fatalf("expected proxy plist cleanup after rollback, stat err=%v", statErr)
+	}
+	if _, statErr := os.Stat(syncPlist); !os.IsNotExist(statErr) {
+		t.Fatalf("expected sync plist cleanup after rollback, stat err=%v", statErr)
+	}
+}
+
 type noopBackendProxyRenderer struct{}
 
 func (noopBackendProxyRenderer) WriteProxyConfig(_ context.Context, rt backend.Runtime) error {

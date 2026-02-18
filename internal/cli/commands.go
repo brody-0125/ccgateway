@@ -2298,6 +2298,9 @@ func (a *application) cmdScopeSwitch(args []string) error {
 	if err != nil {
 		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --to scope id", err)
 	}
+	if fromRef.ScopeID() == toRef.ScopeID() {
+		return cberr.New(cberr.ErrInvalidArgs, fmt.Sprintf("scope switch requires different --from and --to scopes; for same-scope model change use: ccb model switch --vendor %s --profile %s --model <name>", fromRef.VendorID, fromRef.ProfileID))
+	}
 	normalizedModel, err := modelnorm.NormalizeForVendor(toRef.VendorID, *modelName)
 	if err != nil {
 		return cberr.Wrap(cberr.ErrInvalidArgs, "scope switch requires --model", err)
@@ -2373,11 +2376,12 @@ func (a *application) cmdScopeSwitch(args []string) error {
 			targetStatus = "exists"
 		}
 		fmt.Printf("scope switch dry-run: from=%s to=%s model=%s\n", fromRef.ScopeID(), toRef.ScopeID(), normalizedModel)
-		fmt.Printf("[OK] source active contract\n")
+		fmt.Printf("[OK] source active contract (gen=%s)\n", strings.TrimSpace(prevActive.ActiveGeneration))
 		fmt.Printf("[OK] source policy\n")
 		fmt.Printf("[OK] target pre-check (%s)\n", targetStatus)
 		fmt.Printf("[OK] model normalization (%s)\n", normalizedModel)
-		fmt.Printf("dry-run passed — no changes made\n")
+		fmt.Printf("dry-run passed (pre-validation only) — no changes made\n")
+		fmt.Printf("note: proxy, auth, and service checks run only during actual execution\n")
 		return nil
 	}
 
@@ -2487,9 +2491,7 @@ func (a *application) cmdScopeSwitch(args []string) error {
 			return cberr.Wrap(cberr.ErrSwitchFailed, "scope switch target service reconcile failed", err)
 		}
 		return nil
-	}, func() error {
-		return restorer.restore()
-	})
+	}, nil)
 
 	tx.Add("scope.switch.activate", func() error {
 		expectedSourceActive := expectedActiveRequirement{
@@ -2512,6 +2514,9 @@ func (a *application) cmdScopeSwitch(args []string) error {
 			if err := control.SaveActive(activePath, prevActive); err != nil {
 				rollbackErrs = append(rollbackErrs, fmt.Errorf("failed to restore active pointer: %w", err))
 			}
+		}
+		if err := restorer.restore(); err != nil {
+			rollbackErrs = append(rollbackErrs, err)
 		}
 		return stderrors.Join(rollbackErrs...)
 	})
