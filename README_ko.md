@@ -105,6 +105,8 @@ Codex에서는 모델 별칭이 canonical ID로 정규화됩니다 (`codex` -> `
 Claude direct 스코프를 바로 구성하려면:
 
 ```bash
+ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-sonnet-4-6
+# 또는 최고 지능 모델
 ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-opus-4-6
 ```
 
@@ -202,13 +204,14 @@ ccb setup --vendor codex --profile default --runtime-mode native-cleanup
 ccb doctor --vendor codex --profile default
 ```
 
-native cleanup 이후에는 Claude Code native 경로에서 `claude-opus-4-6` 같은 Claude 모델을 직접 선택해 사용합니다.
+native cleanup 이후에는 Claude Code native 경로에서 `claude-sonnet-4-6` 또는 `claude-opus-4-6` 같은 Claude 모델을 직접 선택해 사용합니다.
 
 ### 10) 크로스 벤더 failover (원샷)
 
 ```bash
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
-ccb failover --from codex:default --to claude:default --model claude-opus-4-6
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6
+# 또는 --model claude-opus-4-6 (최고 지능 모델)
 ```
 
 `failover`는 트랜잭션 전환으로 동작합니다: target 스코프 bootstrap/update(해당 스코프 runtime mode 사용) -> target runtime 준비(gateway일 때만) -> active 전환 -> doctor 검증 -> 실패 시 롤백.
@@ -223,14 +226,14 @@ ccb failover --from codex:default --to claude:default --model claude-opus-4-6
 - warning: 참고 신호(예: route/tool integrity)
 
 ```bash
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
 ```
 
 멀티 에이전트/운영자 인수인계를 위해 실행 번들을 만들 수 있습니다.
 
 ```bash
-ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
+ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md
 ```
 
 `handoff create`는 scope/service를 변경하지 않고, `preflight -> failover -> doctor` 실행 순서를 markdown/JSON으로 정리합니다.
@@ -261,7 +264,7 @@ ccb service stop --vendor codex --profile default
 ccb claude apply --vendor codex --profile default
 ccb claude revert --vendor codex --profile default
 ccb model switch --vendor codex --profile default --model codex-spark
-ccb failover --from codex:default --to claude:default --model claude-opus-4-6
+ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6
 ccb use --vendor codex --profile default
 ccb uninstall --vendor codex --profile default
 ccb uninstall --vendor codex --profile default --purge
@@ -278,9 +281,9 @@ ccb service status --active
 ccb doctor --vendor codex --profile default
 ccb doctor --active
 ccb doctor --vendor codex --profile default --verbose
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
-ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
+ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md
 ```
 
 백엔드 런타임 엔트리포인트(스코프 플래그 없음, builtin 래퍼가 사용):
@@ -359,7 +362,7 @@ go test -race ./...
 
 ## 트러블슈팅
 
-### `unknown provider for model claude-opus-4-6`
+### `unknown provider for model claude-opus-4-6` (또는 `claude-sonnet-4-6`)
 
 프록시 alias 설정이 오래된 상태일 때 발생합니다. 스코프 서비스/설정을 재생성하세요.
 
