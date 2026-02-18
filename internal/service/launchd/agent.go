@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	modelnorm "ccgateway/internal/model"
 )
 
 type Manager struct {
@@ -196,57 +194,6 @@ func (m *Manager) run(args ...string) (string, string, error) {
 		return stdout.String(), stderr.String(), fmt.Errorf("launchctl %v failed: %v | stderr=%s", args, err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), stderr.String(), nil
-}
-
-func WriteProxyConfig(path string, port int, authDir, model string) error {
-	model = strings.TrimSpace(model)
-	if model == "" {
-		model = modelnorm.CodexModel
-	}
-	reasoningEffort := "xhigh"
-	if strings.EqualFold(model, modelnorm.CodexSparkModel) {
-		// Spark is tuned for low-latency interactions; lower reasoning budget reduces malformed tool-call spikes.
-		reasoningEffort = "medium"
-	}
-	body := fmt.Sprintf(
-		"port: %d\nauth-dir: %q\n\noauth-model-alias:\n  codex:\n%s\npayload:\n  override:\n    - models:\n        - name: \"gpt-*\"\n          protocol: \"codex\"\n      params:\n        \"reasoning.effort\": %q\n        \"parallel_tool_calls\": false\n",
-		port,
-		authDir,
-		codexAliasSection(model),
-		reasoningEffort,
-	)
-	return writeAtomic(path, []byte(body), 0o644)
-}
-
-func codexAliasSection(model string) string {
-	aliases := []string{
-		"opus",
-		"opusplan",
-		"sonnet",
-		"haiku",
-		"claude-opus",
-		"claude-sonnet",
-		"claude-haiku",
-		"claude-opus-4-6",
-		"claude-sonnet-4-6",
-		"claude-haiku-4-6",
-		"claude-opus-4-5",
-		"claude-sonnet-4-5",
-		"claude-haiku-4-5",
-		"claude-opus-4-5-20251101",
-		"claude-sonnet-4-5-20250929",
-		"claude-haiku-4-5-20251001",
-	}
-	var b strings.Builder
-	for _, alias := range aliases {
-		_, _ = fmt.Fprintf(&b, "    - name: %q\n      alias: %q\n      fork: true\n", model, alias)
-	}
-	return b.String()
-}
-
-func WriteSyncScript(path, executablePath, vendorID, profileID string) error {
-	body := fmt.Sprintf("#!/usr/bin/env bash\nset -euo pipefail\n\n%q auth sync --vendor %q --profile %q\n", executablePath, vendorID, profileID)
-	return writeAtomic(path, []byte(body), 0o755)
 }
 
 func syncPlist(files AgentFiles) string {

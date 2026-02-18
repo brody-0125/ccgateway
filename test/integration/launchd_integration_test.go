@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"ccgateway/internal/proxy"
 	"ccgateway/internal/service/launchd"
 )
 
@@ -37,10 +38,10 @@ func TestLaunchdManagerWithStub(t *testing.T) {
 	if err := os.WriteFile(files.AuthSource, []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write auth source: %v", err)
 	}
-	if err := launchd.WriteSyncScript(files.SyncScript, "/usr/local/bin/ccb", "codex", "default"); err != nil {
+	if err := proxy.WriteSyncScript(files.SyncScript, "/usr/local/bin/ccb", "codex", "default"); err != nil {
 		t.Fatalf("write sync script: %v", err)
 	}
-	if err := launchd.WriteProxyConfig(files.ProxyConfig, 12345, filepath.Join(dir, "auths"), "gpt-5.3-codex"); err != nil {
+	if err := proxy.WriteProxyConfig(files.ProxyConfig, 12345, filepath.Join(dir, "auths"), "gpt-5.3-codex"); err != nil {
 		t.Fatalf("write proxy config: %v", err)
 	}
 
