@@ -2906,11 +2906,19 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 	t.Setenv("CCB_CWD", tmpHome)
 	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
 
+	// Allocate port for proxy mock.
+	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
+	if probeErr != nil {
+		t.Fatalf("allocate free port failed: %v", probeErr)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
 		t.Fatalf("mkdir auth source dir failed: %v", err)
 	}
-	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
 		t.Fatalf("write auth source failed: %v", err)
 	}
 
@@ -2945,6 +2953,34 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 	}
 	app.registry = reg
 	app.backendRegistry = backendReg
+
+	// Pre-bootstrap with known port so setup reuses it, then start mock server.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--runtime-mode", "gateway",
+		"--gateway-backend", "stub-backend",
+		"--port", strconv.Itoa(port),
+	}); err != nil {
+		t.Fatalf("pre-bootstrap codex failed: %v", err)
+	}
+
+	ln, listenErr := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if listenErr != nil {
+		t.Fatalf("listen on proxy port failed: %v", listenErr)
+	}
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("{\"object\":\"list\",\"data\":[]}"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}),
+	}
+	go func() { _ = srv.Serve(ln) }()
+	defer func() { _ = srv.Close() }()
 
 	if err := app.cmdSetup([]string{
 		"--vendor", "codex",
@@ -3300,7 +3336,7 @@ func TestScopeSwitchRollsBackOnDoctorFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected scope switch failure due doctor validation")
 	}
-	if code := cberr.Code(err); code != cberr.ErrSwitchValidation && code != cberr.ErrRollbackFailed {
+	if code := cberr.Code(err); code != cberr.ErrSwitchFailed && code != cberr.ErrRollbackFailed {
 		t.Fatalf("unexpected error code: %s (%v)", code, err)
 	}
 
@@ -3341,11 +3377,19 @@ func TestScopeSwitchRoundtripCodexClaudeCodex(t *testing.T) {
 	t.Setenv("CCB_CWD", tmpHome)
 	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
 
+	// Allocate port for proxy mock.
+	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
+	if probeErr != nil {
+		t.Fatalf("allocate free port failed: %v", probeErr)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
 		t.Fatalf("mkdir auth source dir failed: %v", err)
 	}
-	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
 		t.Fatalf("write auth source failed: %v", err)
 	}
 
@@ -3380,6 +3424,34 @@ func TestScopeSwitchRoundtripCodexClaudeCodex(t *testing.T) {
 	}
 	app.registry = reg
 	app.backendRegistry = backendReg
+
+	// Pre-bootstrap with known port, then start mock server for doctor.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--runtime-mode", "gateway",
+		"--gateway-backend", "stub-backend",
+		"--port", strconv.Itoa(port),
+	}); err != nil {
+		t.Fatalf("pre-bootstrap codex failed: %v", err)
+	}
+
+	ln, listenErr := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if listenErr != nil {
+		t.Fatalf("listen on proxy port failed: %v", listenErr)
+	}
+	srvMock := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("{\"object\":\"list\",\"data\":[]}"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}),
+	}
+	go func() { _ = srvMock.Serve(ln) }()
+	defer func() { _ = srvMock.Close() }()
 
 	if err := app.cmdSetup([]string{
 		"--vendor", "codex",
@@ -3431,6 +3503,9 @@ func TestScopeSwitchRejectsNativeCleanupTarget(t *testing.T) {
 
 	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
 		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "cleanup", "--runtime-mode", "gateway"}); err != nil {
+		t.Fatalf("bootstrap gateway for cleanup target failed: %v", err)
 	}
 	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "cleanup", "--runtime-mode", "native-cleanup"}); err != nil {
 		t.Fatalf("bootstrap cleanup target failed: %v", err)
@@ -3672,11 +3747,19 @@ func TestScopeSwitchGatewayTargetSuccess(t *testing.T) {
 	t.Setenv("CCB_CWD", tmpHome)
 	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
 
+	// Allocate a free port for the proxy mock.
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("allocate free port failed: %v", err)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
 		t.Fatalf("mkdir auth source dir failed: %v", err)
 	}
-	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
 		t.Fatalf("write auth source failed: %v", err)
 	}
 
@@ -3714,7 +3797,34 @@ func TestScopeSwitchGatewayTargetSuccess(t *testing.T) {
 		t.Fatalf("use source failed: %v", err)
 	}
 
-	// Switch to gateway codex target.
+	// Pre-bootstrap codex target as gateway with known port so we can mock it.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--port", strconv.Itoa(port),
+	}); err != nil {
+		t.Fatalf("pre-bootstrap target failed: %v", err)
+	}
+
+	// Start HTTP mock server on the proxy port for doctor health check.
+	ln, listenErr := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if listenErr != nil {
+		t.Fatalf("listen on proxy port failed: %v", listenErr)
+	}
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("{\"object\":\"list\",\"data\":[]}"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}),
+	}
+	go func() { _ = srv.Serve(ln) }()
+	defer func() { _ = srv.Close() }()
+
+	// Activate claude:default as source, then switch to gateway codex target.
 	if err := app.cmdScope([]string{"switch",
 		"--from", "claude:default",
 		"--to", "codex:default",
@@ -3766,7 +3876,7 @@ func TestScopeSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
 		t.Fatalf("mkdir auth source dir failed: %v", err)
 	}
-	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
 		t.Fatalf("write auth source failed: %v", err)
 	}
 
@@ -3820,6 +3930,7 @@ func TestScopeSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 			switchErrCh <- err
 			return
 		}
+		other.backendRegistry = backendReg
 		switchErrCh <- other.cmdUse([]string{"--vendor", "claude", "--profile", "alt"})
 	}()
 
@@ -3863,7 +3974,7 @@ func TestScopeSwitchRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
 		t.Fatalf("mkdir auth source dir failed: %v", err)
 	}
-	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
 		t.Fatalf("write auth source failed: %v", err)
 	}
 

@@ -2558,11 +2558,15 @@ func (a *application) cmdScopeSwitch(args []string) error {
 	}, nil)
 
 	if err := tx.Run(); err != nil {
+		// Always attempt restorer cleanup. When the failing step was before
+		// activate (e.g. proxy.setup), the rollback chain never reaches
+		// activate's Undo. restorer.restore() is idempotent.
+		_ = restorer.restore()
 		var rbErr *installtx.RollbackError
 		if stderrors.As(err, &rbErr) {
 			return cberr.Wrap(cberr.ErrRollbackFailed, "scope switch failed and rollback was required", err)
 		}
-		return err
+		return cberr.Wrap(cberr.ErrSwitchFailed, "scope switch failed", err)
 	}
 
 	toRT.Logger.Infof("scope switch complete from=%s to=%s model=%s", fromRef.ScopeID(), toRef.ScopeID(), normalizedModel)
@@ -3667,9 +3671,14 @@ type targetScopeRestorer struct {
 	prevToState            state.State
 	rollbackTargetRT       *runtime
 	targetBootstrapApplied bool
+	restored               bool
 }
 
 func (r *targetScopeRestorer) restore() error {
+	if r.restored {
+		return nil
+	}
+	r.restored = true
 	var restoreErrs []error
 	if r.rollbackTargetRT != nil && isGatewayProxyMode(*r.rollbackTargetRT) {
 		mgr := launchd.NewManager()
