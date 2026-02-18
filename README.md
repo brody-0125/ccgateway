@@ -110,6 +110,8 @@ For Codex, model aliases are normalized (`codex` -> `gpt-5.3-codex`, `codex-spar
 Direct Claude scope setup (no local proxy route):
 
 ```bash
+ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-sonnet-4-6
+# or for max intelligence
 ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-opus-4-6
 ```
 
@@ -207,13 +209,14 @@ ccb setup --vendor codex --profile default --runtime-mode native-cleanup
 ccb doctor --vendor codex --profile default
 ```
 
-After native cleanup, select/use Claude-native model (for example `claude-opus-4-6`) directly in Claude Code path.
+After native cleanup, select/use Claude-native model (for example `claude-sonnet-4-6` or `claude-opus-4-6`) directly in Claude Code path.
 
 ### 10) Cross-vendor failover (one-shot)
 
 ```bash
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
-ccb failover --from codex:default --to claude:default --model claude-opus-4-6
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6
+# or --model claude-opus-4-6 for max intelligence
 ```
 
 `failover` applies a transactional scope switch: target bootstrap/update (uses target scope runtime mode) -> target runtime prep (gateway only) -> active switch -> doctor validation -> rollback on failure.
@@ -228,14 +231,14 @@ For existing target scopes, settings binding/policy validation now runs before m
 - warnings (advisory signals like route/tool integrity)
 
 ```bash
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
 ```
 
 For multi-agent/operator handoff, generate a ready-to-run bundle:
 
 ```bash
-ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
+ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md
 ```
 
 `handoff create` does not mutate scopes/services. It packages preflight checks and next commands (`preflight -> failover -> doctor`) into markdown or JSON.
@@ -266,7 +269,7 @@ ccb service stop --vendor codex --profile default
 ccb claude apply --vendor codex --profile default
 ccb claude revert --vendor codex --profile default
 ccb model switch --vendor codex --profile default --model codex-spark
-ccb failover --from codex:default --to claude:default --model claude-opus-4-6
+ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6
 ccb use --vendor codex --profile default
 ccb uninstall --vendor codex --profile default
 ccb uninstall --vendor codex --profile default --purge
@@ -283,9 +286,9 @@ ccb service status --active
 ccb doctor --vendor codex --profile default
 ccb doctor --active
 ccb doctor --vendor codex --profile default --verbose
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6
-ccb preflight --from codex:default --to claude:default --model claude-opus-4-6 --json
-ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
+ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md
 ```
 
 Backend runtime entrypoint (no scope flags, used by builtin wrapper):
@@ -364,7 +367,7 @@ go test -race ./...
 
 ## Troubleshooting
 
-### `unknown provider for model claude-opus-4-6`
+### `unknown provider for model claude-opus-4-6` (or `claude-sonnet-4-6`)
 
 This indicates proxy alias config is stale. Regenerate scope service/config:
 

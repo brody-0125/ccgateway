@@ -46,6 +46,16 @@ detect_arch() {
   esac
 }
 
+detect_os() {
+  local kernel
+  kernel="$(uname -s)"
+  case "$kernel" in
+    Darwin) printf 'darwin\n' ;;
+    Linux)  printf 'linux\n' ;;
+    *) fail "unsupported OS: ${kernel}" ;;
+  esac
+}
+
 semver_gt() {
   local a1 a2 a3 apre atag b1 b2 b3 bpre btag
   read -r a1 a2 a3 apre atag <<< "$(semver_parse "$1")" || return 1
@@ -86,13 +96,14 @@ semver_parse() {
 select_latest_dist_archive() {
   local dist_dir="$1"
   local arch="$2"
+  local os_name="$3"
   local best_path=""
   local best_ver=""
   local file base ver
 
   while IFS= read -r file; do
     base="$(basename "$file")"
-    if [[ "$base" =~ ^ccgateway_([^_]+)_darwin_${arch}\.tar\.gz$ ]]; then
+    if [[ "$base" =~ ^ccgateway_([^_]+)_${os_name}_${arch}\.tar\.gz$ ]]; then
       ver="${BASH_REMATCH[1]}"
       if ! semver_parse "$ver" >/dev/null; then
         continue
@@ -102,7 +113,7 @@ select_latest_dist_archive() {
         best_path="$file"
       fi
     fi
-  done < <(find "$dist_dir" -maxdepth 1 -type f -name "ccgateway_*_darwin_${arch}.tar.gz" | sort)
+  done < <(find "$dist_dir" -maxdepth 1 -type f -name "ccgateway_*_${os_name}_${arch}.tar.gz" | sort)
 
   if [[ -n "$best_path" ]]; then
     printf '%s\n' "$best_path"
@@ -246,7 +257,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$(uname -s)" == "Darwin" ]] || fail "this installer supports macOS only"
+_DETECTED_OS="$(uname -s)"
+case "$_DETECTED_OS" in
+  Darwin|Linux) ;;
+  *) fail "unsupported OS: ${_DETECTED_OS} (supported: macOS, Linux)" ;;
+esac
+
+DETECTED_OS="$(detect_os)"
 
 case "$ARCH" in
   auto) ARCH="$(detect_arch)" ;;
@@ -281,12 +298,12 @@ case "$MODE" in
     [[ -f "$CHECKSUMS_FILE" ]] || fail "checksums file not found: ${CHECKSUMS_FILE}"
 
     if [[ "$VERSION" == "latest" ]]; then
-      ARCHIVE_PATH="$(select_latest_dist_archive "$FROM_DIST" "$ARCH")"
-      [[ -n "$ARCHIVE_PATH" ]] || fail "no archive found for darwin_${ARCH} in ${FROM_DIST}"
+      ARCHIVE_PATH="$(select_latest_dist_archive "$FROM_DIST" "$ARCH" "$DETECTED_OS")"
+      [[ -n "$ARCHIVE_PATH" ]] || fail "no archive found for ${DETECTED_OS}_${ARCH} in ${FROM_DIST}"
     else
       TAG="$(resolve_tag "local/local" "$VERSION")"
       VERSION_NO_V="${TAG#v}"
-      ARCHIVE_PATH="${FROM_DIST}/ccgateway_${VERSION_NO_V}_darwin_${ARCH}.tar.gz"
+      ARCHIVE_PATH="${FROM_DIST}/ccgateway_${VERSION_NO_V}_${DETECTED_OS}_${ARCH}.tar.gz"
       [[ -f "$ARCHIVE_PATH" ]] || fail "archive not found: ${ARCHIVE_PATH}"
     fi
 
@@ -306,7 +323,7 @@ case "$MODE" in
 
     TAG="$(resolve_tag "$REPO" "$VERSION")"
     VERSION_NO_V="${TAG#v}"
-    ARCHIVE_NAME="ccgateway_${VERSION_NO_V}_darwin_${ARCH}.tar.gz"
+    ARCHIVE_NAME="ccgateway_${VERSION_NO_V}_${DETECTED_OS}_${ARCH}.tar.gz"
     CHECKSUMS_NAME="checksums.txt"
     BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 

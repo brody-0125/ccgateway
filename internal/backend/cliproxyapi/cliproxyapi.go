@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 
 	"ccgateway/internal/backend"
-	"ccgateway/internal/launchd"
 	"ccgateway/internal/proxy"
 )
 
@@ -38,7 +38,7 @@ func (artifactInstaller) Install(_ context.Context, rt backend.Runtime, version 
 	res, err := installer.Install(proxy.InstallOptions{
 		Version:     version,
 		Destination: rt.Paths.ProxyBinary,
-		OS:          "darwin",
+		OS:          runtime.GOOS,
 		Arch:        "",
 	})
 	if err != nil {
@@ -48,11 +48,11 @@ func (artifactInstaller) Install(_ context.Context, rt backend.Runtime, version 
 }
 
 func (proxyRenderer) WriteProxyConfig(_ context.Context, rt backend.Runtime) error {
-	return launchd.WriteProxyConfig(rt.Paths.ProxyConfig, rt.Config.Port, rt.Paths.AuthDir, rt.Config.Model)
+	return proxy.WriteProxyConfig(rt.Paths.ProxyConfig, rt.Config.Port, rt.Paths.AuthDir, rt.Config.Model)
 }
 
 func (proxyRenderer) WriteSyncScript(_ context.Context, rt backend.Runtime, executablePath string) error {
-	return launchd.WriteSyncScript(rt.Paths.SyncScriptPath, executablePath, rt.Ref.VendorID, rt.Ref.ProfileID)
+	return proxy.WriteSyncScript(rt.Paths.SyncScriptPath, executablePath, rt.Ref.VendorID, rt.Ref.ProfileID)
 }
 
 func (healthChecker) Check(_ context.Context, rt backend.Runtime) error {
