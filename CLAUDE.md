@@ -47,7 +47,7 @@ When the user asks to install/setup ccgateway, the agent should:
    - `vendor` (recommended default: `codex`)
    - `profile` (recommended default: `default`)
    - `runtime_mode` (`gateway` recommended; `native-cleanup` is cleanup-only, `native-direct` for direct Claude scopes)
-   - `model` (recommended default: `gpt-5.3-codex`; optional: `codex-spark` -> `gpt-5.3-codex-spark`)
+   - `model` (recommended default: `gpt-5.3-codex`; optional: `codex-spark` -> `gpt-5.3-codex-spark`; for `vendor=claude`: `claude-sonnet-4-6` recommended, `claude-opus-4-6` for max intelligence)
    - `settings_layer` (recommended default: `project` for per-project/session isolation; `user` only when global routing is explicitly desired)
 2. Perform install + setup commands directly.
 3. Return final status/result only after `doctor` succeeds (or return actionable failure).
@@ -57,7 +57,7 @@ When the user asks to install/setup ccgateway, the agent should:
 - "Which vendor should I configure?" (`codex` recommended)
 - "Which profile should I create/use?" (`default` recommended)
 - "Which runtime mode should I set?" (`gateway` recommended, `native-cleanup` only for cleanup transition, `native-direct` for direct Claude scope)
-- "Which model should I set?" (`gpt-5.3-codex` recommended, `codex-spark` available)
+- "Which model should I set?" (`gpt-5.3-codex` recommended, `codex-spark` available; for `vendor=claude`: `claude-sonnet-4-6` recommended, `claude-opus-4-6` for max intelligence)
 - "Should I isolate settings per project (`project`) or apply globally (`user`)?" (`project` recommended)
 
 ### Execution template (agent runs all commands)
@@ -111,22 +111,25 @@ Cleanup transition (gateway -> native-cleanup) only:
 - `model switch` is active-scope-only. If needed, switch scope first with `ccb use --vendor "$VENDOR" --profile "$PROFILE"`.
 - `model switch` enforces active snapshot/generation consistency during apply and tail verification; if active changed concurrently, switch fails with rollback.
 - For `vendor=codex`, do not pass Claude selectors (`claude-*`, `opus`, `sonnet`, `haiku`) into `--model`; those are rejected by policy.
+- For `vendor=claude`, supported models: `claude-sonnet-4-6` (best balance of speed/intelligence), `claude-opus-4-6` (most intelligent), `claude-haiku-4-5` (fastest).
 - For intentional cross-vendor switching (e.g. switching from Codex to Claude for a different task), prefer `ccb scope switch`:
-  `ccb scope switch --from codex:default --to claude:default --model claude-opus-4-6`
+  `ccb scope switch --from codex:default --to claude:default --model claude-sonnet-4-6`
+  (or `--model claude-opus-4-6` for max intelligence)
 - Use `--dry-run` to validate a scope switch before executing:
-  `ccb scope switch --from codex:default --to claude:default --model claude-opus-4-6 --dry-run`
+  `ccb scope switch --from codex:default --to claude:default --model claude-sonnet-4-6 --dry-run`
 - `scope switch` is source-active-only (like failover); the `--from` scope must be the currently active scope.
 - `scope switch` uses `installtx.Transaction` for atomic rollback; on any step failure the entire operation reverts.
 - `scope switch` supports same-vendor switching with different profiles (e.g. `codex:default` → `codex:work`) as an alternative to `use` + `model switch` when both scope activation and model change are needed in one step.
 - `scope switch` rejects same-scope switching (`--from` and `--to` must differ); for same-scope model changes, use `ccb model switch`.
 - If Codex quota/token is exhausted and user wants Claude Opus/Sonnet fallback, prefer cross-vendor failover:
-  `ccb failover --from codex:default --to claude:default --model claude-opus-4-6`
+  `ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6`
+  (or `--model claude-opus-4-6` for max intelligence)
 - Before executing failover, run preflight first:
-  `ccb preflight --from codex:default --to claude:default --model claude-opus-4-6`
+  `ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6`
 - For existing failover targets, `ccb` validates target settings binding/policy before mutation; if target binding is mismatched, failover is blocked without changing target config/state.
 - `failover` also validates source-active snapshot at switch time; if another command changed active scope concurrently, failover aborts and rollback avoids clobbering that external active change.
 - For multi-agent/operator transfer, generate handoff bundle first:
-  `ccb handoff create --from codex:default --to claude:default --model claude-opus-4-6 --output /tmp/ccb-handoff.md`
+  `ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md`
 - If only cleanup is required (no scope switch), use:
   `ccb setup --vendor "$VENDOR" --profile "$PROFILE" --runtime-mode native-cleanup` and re-check with `ccb doctor --vendor "$VENDOR" --profile "$PROFILE"`.
 
@@ -148,7 +151,7 @@ the agent should execute:
 From `v0.2.4`, failed `service install` attempts launchd cleanup automatically (bootout + plist removal), so retrying the chain above is the preferred recovery path instead of manual `launchctl load`.
 `v0.3.0` adds `ccb service reconcile --vendor "$VENDOR" --profile "$PROFILE"` as a single recovery chain wrapper.
 
-If requests fail with `unknown provider for model claude-opus-4-6`, the agent should treat it as stale proxy config and run:
+If requests fail with `unknown provider for model claude-opus-4-6` (or `claude-sonnet-4-6`), the agent should treat it as stale proxy config and run:
 
 ```bash
 "$HOME/.local/bin/ccb" service install --vendor "$VENDOR" --profile "$PROFILE"
