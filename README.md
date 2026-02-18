@@ -1,6 +1,6 @@
 # ccgateway
 
-Go-based macOS CLI for scoped vendor/profile routing with explicit Claude settings apply/revert, transactional rollback, and checksum-verified proxy installs.
+Go-based CLI (macOS / Linux) for scoped vendor/profile routing with explicit Claude settings apply/revert, transactional rollback, and checksum-verified proxy installs.
 
 ## CLI discovery and visibility
 
@@ -30,7 +30,7 @@ flowchart TD
   A["User runs ccb setup"] --> B["bootstrap (scope config/state)"]
   B --> C["proxy install + checksum verify"]
   C --> D["auth sync"]
-  D --> E["service install/start (launchd)"]
+  D --> E["service install/start (launchd / systemd)"]
   E --> F["claude apply (settings snapshot + apply)"]
   F --> G["doctor (route proof + health checks)"]
 
@@ -48,9 +48,15 @@ flowchart TD
 
 ### 1) Prerequisites
 
-- macOS (darwin `arm64` or `amd64`)
+- **macOS** (darwin `arm64` or `amd64`) **or Linux** (`amd64` or `arm64`)
 - Claude Code installed
 - Codex auth file available at `~/.codex/auth.json` (gateway mode); native cleanup mode does not require auth sync/source
+
+**Linux-specific prerequisites:**
+
+- `systemd` (user session support required)
+- `loginctl enable-linger <user>` — enables user services to run without an active login session
+- `XDG_RUNTIME_DIR` set (typically `/run/user/$(id -u)`; auto-set on most systemd distros)
 
 ### 2) Install `ccb`
 
@@ -109,7 +115,7 @@ ccb setup --vendor claude --profile default --runtime-mode native-direct --model
 ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-opus-4-6
 ```
 
-If you upgraded `ccb` binary, run `ccb service install --vendor codex --profile default` once to regenerate launchd/plist/proxy config before `service start`.
+If you upgraded `ccb` binary, run `ccb service install --vendor codex --profile default` once to regenerate service config (launchd plist on macOS, systemd unit on Linux) before `service start`.
 
 ### 4) Bootstrap a scope (manual path)
 
@@ -295,7 +301,7 @@ ccb gateway serve --config <path>
 
 - SHA256 hard verification using release `checksums.txt` (`ERR_CHECKSUM_MISMATCH` on mismatch)
 - Transactional install/apply/model-switch flows with rollback compensation
-- Explicit `launchctl` failures surfaced with error codes (no silent warnings)
+- Explicit service manager failures (`launchctl` on macOS, `systemctl --user` on Linux) surfaced with error codes (no silent warnings)
 - Runtime mode isolation: `proxy/service` commands require `runtime_mode=gateway`; `runtime_mode=native-cleanup` is cleanup-only; `runtime_mode=native-direct` is direct vendor path without local proxy routing
 - Codex model aliases are normalized at input (`codex`/`codex-spark`/`spark`), Codex scopes reject Claude selector models as upstream targets, and proxy alias mapping keeps Claude-style selectors routed to the configured Codex model
 - Snapshot+hash-based Claude settings restore; repeated apply/use keeps the original verified baseline so `claude revert` restores true pre-apply settings
@@ -321,7 +327,7 @@ Per scope:
 - `vendors/<vendor>/profiles/<profile>/auth/`
 - `vendors/<vendor>/profiles/<profile>/logs/app.log`
 - `vendors/<vendor>/profiles/<profile>/proxy/`
-- `vendors/<vendor>/profiles/<profile>/launchd/`
+- `vendors/<vendor>/profiles/<profile>/launchd/` (macOS) or `vendors/<vendor>/profiles/<profile>/systemd/` (Linux)
 - `vendors/<vendor>/profiles/<profile>/snapshots/`
 
 ## Config schema
@@ -348,7 +354,7 @@ settings_path: "/path/to/project/.claude/settings.json"
 ## CI and release
 
 - CI: `.github/workflows/ci.yml` (`go vet`, `go test`, `go test -race`)
-- Release: `.github/workflows/release.yml` (darwin `amd64/arm64` binaries + `checksums.txt` upload)
+- Release: `.github/workflows/release.yml` (darwin `amd64/arm64` + linux `amd64/arm64` binaries + `checksums.txt` upload)
 
 ## Build and test
 
@@ -411,15 +417,33 @@ ccb service start --vendor codex --profile default
 ccb doctor --vendor codex --profile default
 ```
 
-### `service install` fails midway and launchd state looks inconsistent
+### `service install` fails midway and service manager state looks inconsistent
 
-From `v0.2.4`, failed `service install` now performs internal cleanup (both labels bootout + plist removal) before returning error.
+**macOS:** From `v0.2.4`, failed `service install` now performs internal cleanup (both labels bootout + plist removal) before returning error.
 Retry with the standard chain (manual `launchctl load` should not be required):
 
 ```bash
 ccb service install --vendor codex --profile default
 ccb service start --vendor codex --profile default
 ccb doctor --vendor codex --profile default
+```
+
+**Linux:** If `service install` fails midway, stale systemd units may remain. The standard recovery chain handles cleanup:
+
+```bash
+ccb service install --vendor codex --profile default
+ccb service start --vendor codex --profile default
+ccb doctor --vendor codex --profile default
+```
+
+If units remain stuck, manually reset before retrying:
+
+```bash
+systemctl --user stop ccgateway-codex-default-proxy.service 2>/dev/null
+systemctl --user disable ccgateway-codex-default-proxy.service 2>/dev/null
+systemctl --user daemon-reload
+ccb service install --vendor codex --profile default
+ccb service start --vendor codex --profile default
 ```
 
 ### `ERR_POLICY_VIOLATION` appears
@@ -430,13 +454,25 @@ Strict codex policy guard blocked the command. Typical fix is to keep settings s
 ccb setup --vendor codex --profile default --settings-layer project
 ```
 
-### `ERR_LAUNCHCTL_FAILED` with `Could not find service ... sync`
+### macOS: `ERR_LAUNCHCTL_FAILED` with `Could not find service ... sync`
 
 `setup` already retries once automatically for this signature. If it still fails, re-run service install first:
 
 ```bash
 ccb service install --vendor codex --profile default
 ccb service start --vendor codex --profile default
+```
+
+### Linux: `ERR_SYSTEMD_FAILED` with `Unit not found` or `Failed to start`
+
+Ensure user linger is enabled and systemd user session is available:
+
+```bash
+loginctl enable-linger "$(whoami)"
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+ccb service install --vendor codex --profile default
+ccb service start --vendor codex --profile default
+ccb doctor --vendor codex --profile default
 ```
 
 ### Tool calls fail with missing required parameters (`input: {}` in proxy transcripts)

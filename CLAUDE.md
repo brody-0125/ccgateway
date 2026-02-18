@@ -10,7 +10,7 @@ This repository provides a deterministic install/verify flow for agents.
 4. Do not ask users to run `bootstrap`, `proxy install`, `service`, `claude apply`, or `doctor` manually.
 5. The agent must collect scope inputs first, then execute the full setup end-to-end.
 6. After upgrading `ccb`, re-run `service install` for the target scope before `service start` so proxy config/plists are regenerated.
-7. `setup` may auto-retry `service install -> service start` once for known launchctl/connection-refused signatures; if it still fails, use the recovery block below.
+7. `setup` may auto-retry `service install -> service start` once for known service-manager failures (launchctl on macOS, systemctl on Linux) and connection-refused signatures; if it still fails, use the recovery block below.
 
 ## Local development install
 
@@ -36,8 +36,17 @@ This repository provides a deterministic install/verify flow for agents.
 
 ## Notes
 
-- The project is macOS-only for install/runtime operations.
+- The project supports macOS and Linux for install/runtime operations.
+- macOS uses `launchd` (launchctl) for service management; Linux uses `systemd` (systemctl --user) with user linger enabled.
 - If `/usr/local/bin` is used and not writable, `install_ccb.sh` may require `sudo`.
+
+### Linux-specific agent prerequisites
+
+Before running install/setup on Linux, the agent should verify:
+
+1. `systemd` is available (`systemctl --user` must work).
+2. User linger is enabled: `loginctl enable-linger "$(whoami)"`.
+3. `XDG_RUNTIME_DIR` is set (typically `/run/user/$(id -u)`).
 
 ## Agent-first interactive setup (no manual step-by-step)
 
@@ -138,7 +147,8 @@ Cleanup transition (gateway -> native-cleanup) only:
 If setup/start fails with one of these errors:
 
 - `ERR_SWITCH_VALIDATION_FAILED` with `connect: connection refused`
-- `ERR_LAUNCHCTL_FAILED` with `Could not find service`
+- `ERR_LAUNCHCTL_FAILED` with `Could not find service` (macOS)
+- `ERR_SYSTEMD_FAILED` with `Unit not found` or `Failed to start` (Linux)
 
 the agent should execute:
 
@@ -148,8 +158,33 @@ the agent should execute:
 "$HOME/.local/bin/ccb" doctor --vendor "$VENDOR" --profile "$PROFILE"
 ```
 
-From `v0.2.4`, failed `service install` attempts launchd cleanup automatically (bootout + plist removal), so retrying the chain above is the preferred recovery path instead of manual `launchctl load`.
+From `v0.2.4`, failed `service install` attempts automatic cleanup (macOS: bootout + plist removal; Linux: unit stop + disable + daemon-reload), so retrying the chain above is the preferred recovery path instead of manual `launchctl load` or `systemctl --user` commands.
 `v0.3.0` adds `ccb service reconcile --vendor "$VENDOR" --profile "$PROFILE"` as a single recovery chain wrapper.
+
+### Linux-specific recovery: systemd user session issues
+
+If `service install` or `service start` fails on Linux with systemd-related errors, the agent should verify prerequisites before retrying:
+
+```bash
+# ensure user linger is enabled (required for user services without active login)
+loginctl enable-linger "$(whoami)"
+# ensure XDG_RUNTIME_DIR is set
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+# retry the standard recovery chain
+"$HOME/.local/bin/ccb" service install --vendor "$VENDOR" --profile "$PROFILE"
+"$HOME/.local/bin/ccb" service start --vendor "$VENDOR" --profile "$PROFILE"
+"$HOME/.local/bin/ccb" doctor --vendor "$VENDOR" --profile "$PROFILE"
+```
+
+If units remain stuck after repeated failures:
+
+```bash
+systemctl --user stop "ccgateway-${VENDOR}-${PROFILE}-proxy.service" 2>/dev/null
+systemctl --user disable "ccgateway-${VENDOR}-${PROFILE}-proxy.service" 2>/dev/null
+systemctl --user daemon-reload
+"$HOME/.local/bin/ccb" service install --vendor "$VENDOR" --profile "$PROFILE"
+"$HOME/.local/bin/ccb" service start --vendor "$VENDOR" --profile "$PROFILE"
+```
 
 If requests fail with `unknown provider for model claude-opus-4-6` (or `claude-sonnet-4-6`), the agent should treat it as stale proxy config and run:
 
