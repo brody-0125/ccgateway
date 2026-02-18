@@ -23,7 +23,6 @@ import (
 	"ccgateway/internal/doctor"
 	cberr "ccgateway/internal/errors"
 	installtx "ccgateway/internal/install"
-	"ccgateway/internal/launchd"
 	"ccgateway/internal/logx"
 	modelnorm "ccgateway/internal/model"
 	policyguard "ccgateway/internal/policy"
@@ -351,10 +350,10 @@ func (a *application) cleanupGatewayRuntime(ref scope.Ref) error {
 	if err != nil {
 		return err
 	}
-	mgr := launchd.NewManager()
+	mgr := service.NewManager()
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyPlistPath, syncPlistPath := launchAgentPlistPaths(rt.Paths, proxyLabel, syncLabel)
-	if err := mgr.RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath); err != nil {
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
+	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to cleanup existing launch agents", err)
 	}
 	rt.State.Service.Running = false
@@ -521,7 +520,7 @@ func (a *application) cmdBootstrap(args []string) error {
 			if !backendCapabilityImplemented(rt.Backend, backend.CapabilityHealth) {
 				return false
 			}
-			status, statusErr := launchd.NewManager().Status(proxyLabel, syncLabel)
+			status, statusErr := service.NewManager().Status(proxyLabel, syncLabel)
 			if statusErr != nil || !status.ProxyLoaded {
 				return false
 			}
@@ -1199,7 +1198,7 @@ func (a *application) cmdStatus(args []string) error {
 	policyEval := policyguard.Evaluate(rt.Paths, rt.Config)
 	policyOK := policyEval.Mode != policyguard.ModeStrict || len(policyEval.Violations) == 0
 
-	mgr := launchd.NewManager()
+	mgr := service.NewManager()
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
 	proxyLoaded := false
 	syncLoaded := false
@@ -2725,9 +2724,9 @@ func (a *application) cmdUninstall(args []string) error {
 	}
 
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyPlistPath, syncPlistPath := launchAgentPlistPaths(rt.Paths, proxyLabel, syncLabel)
-	mgr := launchd.NewManager()
-	if err := mgr.RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath); err != nil {
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
+	mgr := service.NewManager()
+	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to remove launch agents", err)
 	}
 
@@ -3293,19 +3292,6 @@ func serviceLabelsForRuntime(rt runtime, username string) (string, string) {
 	return rt.Ref.Labels(username)
 }
 
-func launchAgentPlistPaths(paths scope.Paths, proxyLabel, syncLabel string) (string, string) {
-	proxy := strings.TrimSpace(proxyLabel)
-	sync := strings.TrimSpace(syncLabel)
-	proxyPath := paths.ProxyPlistPath
-	syncPath := paths.SyncPlistPath
-	if proxy != "" {
-		proxyPath = filepath.Join(paths.LaunchAgentDir, proxy+".plist")
-	}
-	if sync != "" {
-		syncPath = filepath.Join(paths.LaunchAgentDir, sync+".plist")
-	}
-	return proxyPath, syncPath
-}
 
 func allowSettingsMutation(active control.ActivePointer, ref scope.Ref, generation string) bool {
 	// Older active pointers may not have generation tracking. In that case, still require scope identity.
@@ -3682,10 +3668,10 @@ func (r *targetScopeRestorer) restore() error {
 	r.restored = true
 	var restoreErrs []error
 	if r.rollbackTargetRT != nil && isGatewayProxyMode(*r.rollbackTargetRT) {
-		mgr := launchd.NewManager()
+		mgr := service.NewManager()
 		proxyLabel, syncLabel := serviceLabelsForRuntime(*r.rollbackTargetRT, r.app.username)
-		proxyPlistPath, syncPlistPath := launchAgentPlistPaths(r.rollbackTargetRT.Paths, proxyLabel, syncLabel)
-		if err := mgr.RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath); err != nil {
+		proxyUnitPath, syncUnitPath := service.UnitPaths(r.app.home, r.rollbackTargetRT.Paths.ProxyPlistPath, r.rollbackTargetRT.Paths.SyncPlistPath, proxyLabel, syncLabel)
+		if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
 			restoreErrs = append(restoreErrs, fmt.Errorf("failed to cleanup target launch agents: %w", err))
 		}
 	}

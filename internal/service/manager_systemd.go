@@ -1,5 +1,3 @@
-//go:build linux
-
 package service
 
 import (
@@ -16,8 +14,8 @@ type linuxManager struct {
 	systemctlBin string
 }
 
-// NewManager returns a Linux systemd-backed Manager implementation.
-func NewManager() Manager {
+// newLinuxManager returns a Linux systemd-backed Manager implementation.
+func newLinuxManager() Manager {
 	return &linuxManager{systemctlBin: systemctlBin()}
 }
 
@@ -50,7 +48,7 @@ func (m *linuxManager) Install(files ServiceFiles) error {
 		return fmt.Errorf("failed to enable sync unit: %w", err)
 	}
 	if _, _, err := m.run("--user", "enable", files.ProxyLabel); err != nil {
-		_ = m.run("--user", "disable", files.SyncLabel)
+		_, _, _ = m.run("--user", "disable", files.SyncLabel)
 		_ = os.Remove(files.ProxyUnitPath)
 		_ = os.Remove(files.SyncUnitPath)
 		return fmt.Errorf("failed to enable proxy unit: %w", err)
@@ -145,9 +143,9 @@ func (m *linuxManager) run(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), nil
 }
 
-// UnitPaths resolves Linux systemd user unit file paths for the given labels.
+// linuxUnitPaths resolves Linux systemd user unit file paths for the given labels.
 // Falls back to defaultProxyPath/defaultSyncPath when the corresponding label is empty.
-func UnitPaths(homeDir, defaultProxyPath, defaultSyncPath, proxyLabel, syncLabel string) (string, string) {
+func linuxUnitPaths(homeDir, defaultProxyPath, defaultSyncPath, proxyLabel, syncLabel string) (string, string) {
 	dir := systemdUserDir(homeDir)
 	proxyPath := defaultProxyPath
 	syncPath := defaultSyncPath

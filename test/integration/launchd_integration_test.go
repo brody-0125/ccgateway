@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ccgateway/internal/launchd"
+	"ccgateway/internal/service/launchd"
 )
 
 func TestLaunchdManagerWithStub(t *testing.T) {

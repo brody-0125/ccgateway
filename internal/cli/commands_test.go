@@ -28,6 +28,7 @@ import (
 	providercodex "ccgateway/internal/provider/codex"
 	"ccgateway/internal/providers"
 	"ccgateway/internal/scope"
+	"ccgateway/internal/service"
 	"ccgateway/internal/state"
 )
 
@@ -53,27 +54,30 @@ func TestPromptWithDefault(t *testing.T) {
 	}
 }
 
-func TestLaunchAgentPlistPathsPreferRuntimeLabels(t *testing.T) {
+func TestUnitPathsPreferRuntimeLabels(t *testing.T) {
 	tmpHome := t.TempDir()
 	tmpCwd := filepath.Join(tmpHome, "repo")
 	if err := os.MkdirAll(tmpCwd, 0o755); err != nil {
 		t.Fatalf("mkdir cwd failed: %v", err)
 	}
 	paths := scope.BuildPaths(tmpHome, tmpCwd, scope.MustRef("codex", "default"))
-	paths.LaunchAgentDir = filepath.Join(tmpHome, "Library", "LaunchAgents")
-	paths.ProxyPlistPath = filepath.Join(paths.LaunchAgentDir, "com.legacy.proxy.plist")
-	paths.SyncPlistPath = filepath.Join(paths.LaunchAgentDir, "com.legacy.sync.plist")
 
-	proxyPath, syncPath := launchAgentPlistPaths(paths, "com.real.proxy", "com.real.sync")
-	if want := filepath.Join(paths.LaunchAgentDir, "com.real.proxy.plist"); proxyPath != want {
-		t.Fatalf("unexpected proxy plist path: got=%s want=%s", proxyPath, want)
+	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyPlistPath, paths.SyncPlistPath, "com.real.proxy", "com.real.sync")
+	if proxyPath == paths.ProxyPlistPath {
+		t.Fatal("expected proxyPath to differ from default when label is provided")
 	}
-	if want := filepath.Join(paths.LaunchAgentDir, "com.real.sync.plist"); syncPath != want {
-		t.Fatalf("unexpected sync plist path: got=%s want=%s", syncPath, want)
+	if syncPath == paths.SyncPlistPath {
+		t.Fatal("expected syncPath to differ from default when label is provided")
+	}
+	if !strings.Contains(proxyPath, "com.real.proxy") {
+		t.Fatalf("expected proxyPath to contain label, got=%s", proxyPath)
+	}
+	if !strings.Contains(syncPath, "com.real.sync") {
+		t.Fatalf("expected syncPath to contain label, got=%s", syncPath)
 	}
 }
 
-func TestLaunchAgentPlistPathsFallbackWhenLabelsEmpty(t *testing.T) {
+func TestUnitPathsFallbackWhenLabelsEmpty(t *testing.T) {
 	tmpHome := t.TempDir()
 	tmpCwd := filepath.Join(tmpHome, "repo")
 	if err := os.MkdirAll(tmpCwd, 0o755); err != nil {
@@ -81,7 +85,7 @@ func TestLaunchAgentPlistPathsFallbackWhenLabelsEmpty(t *testing.T) {
 	}
 	paths := scope.BuildPaths(tmpHome, tmpCwd, scope.MustRef("codex", "default"))
 
-	proxyPath, syncPath := launchAgentPlistPaths(paths, "", "")
+	proxyPath, syncPath := service.UnitPaths(tmpHome, paths.ProxyPlistPath, paths.SyncPlistPath, "", "")
 	if proxyPath != paths.ProxyPlistPath {
 		t.Fatalf("expected proxy fallback path=%s, got=%s", paths.ProxyPlistPath, proxyPath)
 	}

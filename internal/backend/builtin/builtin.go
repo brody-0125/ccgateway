@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"ccgateway/internal/backend"
-	"ccgateway/internal/launchd"
+	"ccgateway/internal/service/launchd"
 	"ccgateway/internal/state"
 )
 

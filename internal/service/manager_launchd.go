@@ -1,12 +1,10 @@
-//go:build darwin
-
 package service
 
 import (
 	"path/filepath"
 	"strings"
 
-	"ccgateway/internal/launchd"
+	"ccgateway/internal/service/launchd"
 )
 
 // darwinManager wraps launchd.Manager to implement the service.Manager interface.
@@ -14,8 +12,8 @@ type darwinManager struct {
 	mgr *launchd.Manager
 }
 
-// NewManager returns a macOS launchd-backed Manager implementation.
-func NewManager() Manager {
+// newDarwinManager returns a macOS launchd-backed Manager implementation.
+func newDarwinManager() Manager {
 	return &darwinManager{mgr: launchd.NewManager()}
 }
 
@@ -58,9 +56,9 @@ func (d *darwinManager) Status(proxyLabel, syncLabel string) (ServiceStatus, err
 	}, nil
 }
 
-// UnitPaths resolves macOS launchd plist file paths for the given labels.
+// darwinUnitPaths resolves macOS launchd plist file paths for the given labels.
 // Falls back to defaultProxyPath/defaultSyncPath when the corresponding label is empty.
-func UnitPaths(homeDir, defaultProxyPath, defaultSyncPath, proxyLabel, syncLabel string) (string, string) {
+func darwinUnitPaths(homeDir, defaultProxyPath, defaultSyncPath, proxyLabel, syncLabel string) (string, string) {
 	dir := filepath.Join(homeDir, "Library", "LaunchAgents")
 	proxyPath := defaultProxyPath
 	syncPath := defaultSyncPath
