@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -92,8 +93,19 @@ func (r Ref) Labels(username string) (proxyLabel, syncLabel string) {
 func BuildPaths(home, cwd string, r Ref) Paths {
 	base := filepath.Join(home, ".ccgateway")
 	scopeDir := filepath.Join(base, "vendors", r.VendorID, "profiles", r.ProfileID)
-	launchAgentDir := filepath.Join(home, "Library", "LaunchAgents")
 	proxyLabel, syncLabel := r.Labels(currentUser())
+
+	var serviceUnitDir string
+	var proxyUnitPath, syncUnitPath string
+	if runtime.GOOS == "linux" {
+		serviceUnitDir = filepath.Join(home, ".config", "systemd", "user")
+		proxyUnitPath = filepath.Join(serviceUnitDir, proxyLabel+".service")
+		syncUnitPath = filepath.Join(serviceUnitDir, syncLabel+".service")
+	} else {
+		serviceUnitDir = filepath.Join(home, "Library", "LaunchAgents")
+		proxyUnitPath = filepath.Join(serviceUnitDir, proxyLabel+".plist")
+		syncUnitPath = filepath.Join(serviceUnitDir, syncLabel+".plist")
+	}
 
 	return Paths{
 		Home: home,
@@ -121,9 +133,9 @@ func BuildPaths(home, cwd string, r Ref) Paths {
 		LaunchdDir:     filepath.Join(scopeDir, "launchd"),
 		SyncScriptPath: filepath.Join(scopeDir, "launchd", "sync.sh"),
 
-		LaunchAgentDir: launchAgentDir,
-		ProxyPlistPath: filepath.Join(launchAgentDir, proxyLabel+".plist"),
-		SyncPlistPath:  filepath.Join(launchAgentDir, syncLabel+".plist"),
+		LaunchAgentDir: serviceUnitDir,
+		ProxyPlistPath: proxyUnitPath,
+		SyncPlistPath:  syncUnitPath,
 
 		ClaudeUserSettingsPath:    filepath.Join(home, ".claude", "settings.json"),
 		ClaudeProjectSettingsPath: filepath.Join(cwd, ".claude", "settings.json"),

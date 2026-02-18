@@ -354,7 +354,7 @@ func (a *application) cleanupGatewayRuntime(ref scope.Ref) error {
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
 	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
 	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
-		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to cleanup existing launch agents", err)
+		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to cleanup existing services", err)
 	}
 	rt.State.Service.Running = false
 	if err := state.Save(rt.Paths.StatePath, rt.State); err != nil {
@@ -1208,7 +1208,7 @@ func (a *application) cmdStatus(args []string) error {
 	if isGatewayProxyMode(rt) {
 		status, statusErr := mgr.Status(proxyLabel, syncLabel)
 		if statusErr != nil {
-			healthDetail = fmt.Sprintf("launchd status error: %v", statusErr)
+			healthDetail = fmt.Sprintf("service status error: %v", statusErr)
 		} else {
 			proxyLoaded = status.ProxyLoaded
 			syncLoaded = status.SyncLoaded
@@ -2727,7 +2727,7 @@ func (a *application) cmdUninstall(args []string) error {
 	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
 	mgr := service.NewManager()
 	if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
-		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to remove launch agents", err)
+		return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to remove services", err)
 	}
 
 	if rt.State.Claude.Applied {
@@ -3672,7 +3672,7 @@ func (r *targetScopeRestorer) restore() error {
 		proxyLabel, syncLabel := serviceLabelsForRuntime(*r.rollbackTargetRT, r.app.username)
 		proxyUnitPath, syncUnitPath := service.UnitPaths(r.app.home, r.rollbackTargetRT.Paths.ProxyPlistPath, r.rollbackTargetRT.Paths.SyncPlistPath, proxyLabel, syncLabel)
 		if err := mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath); err != nil {
-			restoreErrs = append(restoreErrs, fmt.Errorf("failed to cleanup target launch agents: %w", err))
+			restoreErrs = append(restoreErrs, fmt.Errorf("failed to cleanup target services: %w", err))
 		}
 	}
 	if !r.toScopeExisted {

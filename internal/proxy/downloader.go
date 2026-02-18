@@ -77,8 +77,8 @@ func (i *Installer) Install(opts InstallOptions) (InstallResult, error) {
 	if goArch == "" {
 		goArch = runtime.GOARCH
 	}
-	if goOS != "darwin" {
-		return InstallResult{}, cberr.New(cberr.ErrInvalidArgs, "only darwin is supported")
+	if goOS != "darwin" && goOS != "linux" {
+		return InstallResult{}, cberr.New(cberr.ErrInvalidArgs, "unsupported OS: "+goOS+" (supported: darwin, linux)")
 	}
 	assetArch := ""
 	switch goArch {
@@ -94,7 +94,7 @@ func (i *Installer) Install(opts InstallOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, err
 	}
-	tarSuffix := fmt.Sprintf("darwin_%s.tar.gz", assetArch)
+	tarSuffix := fmt.Sprintf("%s_%s.tar.gz", goOS, assetArch)
 	targetAsset, checksumsAsset := findAssets(release.Assets, tarSuffix)
 	if targetAsset == nil || checksumsAsset == nil {
 		return InstallResult{}, cberr.New(cberr.ErrDownloadFailed, "required release assets not found")
