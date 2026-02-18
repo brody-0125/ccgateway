@@ -2160,24 +2160,30 @@ func (a *application) cmdFailover(args []string) error {
 
 	toRT, err := a.loadRuntime(toRef, false)
 	if err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	restorer.rollbackTargetRT = &toRT
 	if err := a.enforcePolicy(toRT, "failover target"); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	if toRT.Config.RuntimeMode == config.RuntimeModeNativeCleanup {
+		_ = restorer.restore()
 		return cberr.New(cberr.ErrInvalidConfig, fmt.Sprintf("target scope runtime_mode=%s is cleanup-only and cannot be failover target", config.RuntimeModeNativeCleanup))
 	}
 	if err := a.ensureProviderCapability(toRT, provider.CapabilityClaude); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	if err := ensureScopedSettingsBinding(toRT, "failover target"); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 
 	settingsSnapshotPath, settingsSnapshotSHA, err := snapshotSettingsBackup(toRT.Config.SettingsPath, toRT.Paths.SnapshotsDir, "failover")
 	if err != nil {
+		_ = restorer.restore()
 		return cberr.Wrap(cberr.ErrInvalidConfig, "failed to snapshot current Claude settings before failover", err)
 	}
 
@@ -2435,26 +2441,32 @@ func (a *application) cmdScopeSwitch(args []string) error {
 
 	toRT, err := a.loadRuntime(toRef, false)
 	if err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	restorer.rollbackTargetRT = &toRT
 
 	if err := a.enforcePolicy(toRT, "scope switch target"); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	if toRT.Config.RuntimeMode == config.RuntimeModeNativeCleanup {
+		_ = restorer.restore()
 		return cberr.New(cberr.ErrInvalidConfig, fmt.Sprintf("target scope runtime_mode=%s is cleanup-only and cannot be scope switch target", config.RuntimeModeNativeCleanup))
 	}
 	if err := a.ensureProviderCapability(toRT, provider.CapabilityClaude); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	if err := ensureScopedSettingsBinding(toRT, "scope switch target"); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 
 	// --- Phase 4: Transaction ---
 	settingsSnapshotPath, settingsSnapshotSHA, err := snapshotSettingsBackup(toRT.Config.SettingsPath, toRT.Paths.SnapshotsDir, "scope-switch")
 	if err != nil {
+		_ = restorer.restore()
 		return cberr.Wrap(cberr.ErrInvalidConfig, "failed to snapshot current Claude settings before scope switch", err)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"os"
@@ -3128,6 +3129,25 @@ func TestScopeSwitchCodexToClaudeNativeDirectSuccess(t *testing.T) {
 	if targetRT.State.Claude.AppliedGeneration != active.ActiveGeneration {
 		t.Fatalf("expected generation sync: active=%s state=%s", active.ActiveGeneration, targetRT.State.Claude.AppliedGeneration)
 	}
+
+	// Verify settings file content written by Apply.
+	settingsBody, readErr := os.ReadFile(targetRT.Config.SettingsPath)
+	if readErr != nil {
+		t.Fatalf("failed to read settings file %s: %v", targetRT.Config.SettingsPath, readErr)
+	}
+	var settingsMap map[string]any
+	if err := json.Unmarshal(settingsBody, &settingsMap); err != nil {
+		t.Fatalf("failed to parse settings JSON: %v", err)
+	}
+	if m, _ := settingsMap["model"].(string); m != "claude-opus-4-6" {
+		t.Fatalf("settings file model mismatch: got %q, want %q", m, "claude-opus-4-6")
+	}
+	// native-direct should NOT have local proxy ANTHROPIC_BASE_URL.
+	if env, _ := settingsMap["env"].(map[string]any); env != nil {
+		if baseURL, _ := env["ANTHROPIC_BASE_URL"].(string); strings.Contains(baseURL, "127.0.0.1") {
+			t.Fatalf("native-direct settings should not contain local proxy ANTHROPIC_BASE_URL, got %q", baseURL)
+		}
+	}
 }
 
 func TestScopeSwitchDryRunDoesNotMutate(t *testing.T) {
@@ -3452,6 +3472,8 @@ func TestScopeSwitchExistingTargetPreservesConfig(t *testing.T) {
 		t.Fatalf("load target runtime before switch failed: %v", err)
 	}
 	expectedMode := beforeRT.Config.RuntimeMode
+	expectedSettingsLayer := beforeRT.Config.SettingsLayer
+	expectedSettingsPath := beforeRT.Config.SettingsPath
 
 	if err := app.cmdScope([]string{"switch",
 		"--from", "codex:default",
@@ -3467,6 +3489,12 @@ func TestScopeSwitchExistingTargetPreservesConfig(t *testing.T) {
 	}
 	if afterRT.Config.RuntimeMode != expectedMode {
 		t.Fatalf("expected runtime_mode preserved, got %s (want %s)", afterRT.Config.RuntimeMode, expectedMode)
+	}
+	if afterRT.Config.SettingsLayer != expectedSettingsLayer {
+		t.Fatalf("expected settings_layer preserved, got %s (want %s)", afterRT.Config.SettingsLayer, expectedSettingsLayer)
+	}
+	if afterRT.Config.SettingsPath != expectedSettingsPath {
+		t.Fatalf("expected settings_path preserved, got %s (want %s)", afterRT.Config.SettingsPath, expectedSettingsPath)
 	}
 	if afterRT.Config.Model != "claude-opus-4-6" {
 		t.Fatalf("expected model updated, got %q", afterRT.Config.Model)
@@ -3561,6 +3589,53 @@ func TestScopeSwitchRejectsMissingModelFlag(t *testing.T) {
 	}
 }
 
+func TestScopeSwitchRejectsMissingToFlag(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch", "--from", "codex:default", "--model", "claude-opus-4-6"})
+	if err == nil {
+		t.Fatal("expected error for missing --to")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsExtraArgs(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+		"extra-arg",
+	})
+	if err == nil {
+		t.Fatal("expected error for extra positional arguments")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "unexpected arguments") {
+		t.Fatalf("expected 'unexpected arguments' in error, got: %v", err)
+	}
+}
+
 func TestScopeSwitchRejectsSameScope(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("CCB_HOME", tmpHome)
@@ -3583,6 +3658,96 @@ func TestScopeSwitchRejectsSameScope(t *testing.T) {
 	}
 	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
 		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchGatewayTargetSuccess(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: config.DefaultGatewayBackend,
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.backendRegistry = backendReg
+
+	// Source: native-direct Claude scope.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "default",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdUse([]string{"--vendor", "claude", "--profile", "default"}); err != nil {
+		t.Fatalf("use source failed: %v", err)
+	}
+
+	// Switch to gateway codex target.
+	if err := app.cmdScope([]string{"switch",
+		"--from", "claude:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	}); err != nil {
+		t.Fatalf("scope switch to gateway target failed: %v", err)
+	}
+
+	// Verify target is active.
+	paths := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("codex", "default"))
+	active, loadErr := control.LoadActive(paths.ActivePath)
+	if loadErr != nil {
+		t.Fatalf("load active failed: %v", loadErr)
+	}
+	if active.ActiveVendor != "codex" || active.ActiveProfile != "default" {
+		t.Fatalf("expected codex:default active, got %+v", active)
+	}
+
+	// Verify target has gateway runtime mode.
+	targetRef := scope.MustRef("codex", "default")
+	targetRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime failed: %v", err)
+	}
+	if targetRT.Config.RuntimeMode != config.RuntimeModeGateway {
+		t.Fatalf("expected gateway runtime mode, got %s", targetRT.Config.RuntimeMode)
+	}
+	if targetRT.Config.Model != "gpt-5.3-codex" {
+		t.Fatalf("expected model gpt-5.3-codex, got %q", targetRT.Config.Model)
+	}
+	// Verify proxy binary was installed (artifact step).
+	if _, statErr := os.Stat(targetRT.Paths.ProxyBinary); statErr != nil {
+		t.Fatalf("expected proxy binary at %s, stat err=%v", targetRT.Paths.ProxyBinary, statErr)
 	}
 }
 
