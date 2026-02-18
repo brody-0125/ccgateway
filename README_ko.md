@@ -1,6 +1,6 @@
 # ccgateway
 
-벤더/프로필 스코프 라우팅, 명시적 Claude 설정 apply/revert, 트랜잭션 롤백, 체크섬 검증 기반 프록시 설치를 제공하는 macOS 전용 Go CLI입니다.
+벤더/프로필 스코프 라우팅, 명시적 Claude 설정 apply/revert, 트랜잭션 롤백, 체크섬 검증 기반 프록시 설치를 제공하는 Go CLI(macOS / Linux)입니다.
 
 ## CLI 디스커버리 및 가시성
 
@@ -30,7 +30,7 @@ flowchart TD
   A["사용자가 ccb setup 실행"] --> B["bootstrap (scope config/state)"]
   B --> C["proxy install + checksum verify"]
   C --> D["auth sync"]
-  D --> E["service install/start (launchd)"]
+  D --> E["service install/start (launchd / systemd)"]
   E --> F["claude apply (settings snapshot + apply)"]
   F --> G["doctor (route proof + health checks)"]
 
@@ -48,10 +48,16 @@ flowchart TD
 
 ### 1) 사전 요구사항
 
-- macOS (`darwin arm64` 또는 `darwin amd64`)
+- **macOS** (`darwin arm64` 또는 `darwin amd64`) **또는 Linux** (`amd64` 또는 `arm64`)
 - Claude Code 설치
 - Codex 인증 파일 `~/.codex/auth.json` 준비(gateway 모드)
   (native cleanup 모드는 auth sync/source가 필수가 아니며, 커스텀 경로는 `--auth-source`로 지정 가능)
+
+**Linux 전용 사전 요구사항:**
+
+- `systemd` (사용자 세션 지원 필수)
+- `loginctl enable-linger <user>` — 활성 로그인 세션 없이도 사용자 서비스 실행 가능
+- `XDG_RUNTIME_DIR` 설정 (일반적으로 `/run/user/$(id -u)`; 대부분의 systemd 배포판에서 자동 설정)
 
 ### 2) `ccb` 설치
 
@@ -99,7 +105,7 @@ native cleanup 전환만 필요하면:
 ccb setup --vendor codex --profile default --runtime-mode native-cleanup
 ```
 
-native cleanup setup은 Claude cleanup 적용 전에 기존 scope의 launchd 에이전트(`proxy`/`sync`)도 함께 정리합니다.
+native cleanup setup은 Claude cleanup 적용 전에 기존 scope의 서비스 에이전트(macOS: launchd, Linux: systemd)(`proxy`/`sync`)도 함께 정리합니다.
 Codex에서는 모델 별칭이 canonical ID로 정규화됩니다 (`codex` -> `gpt-5.3-codex`, `codex-spark`/`spark` -> `gpt-5.3-codex-spark`).
 
 Claude direct 스코프를 바로 구성하려면:
@@ -108,7 +114,7 @@ Claude direct 스코프를 바로 구성하려면:
 ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-opus-4-6
 ```
 
-`ccb` 바이너리를 업데이트했다면, `service start` 전에 `ccb service install --vendor codex --profile default`를 1회 실행해 launchd/plist/proxy 설정을 재생성하세요.
+`ccb` 바이너리를 업데이트했다면, `service start` 전에 `ccb service install --vendor codex --profile default`를 1회 실행해 서비스 설정(macOS: launchd plist, Linux: systemd unit)을 재생성하세요.
 
 ### 4) 스코프 초기화 (수동 경로)
 
@@ -293,7 +299,7 @@ ccb gateway serve --config <path>
 
 - 릴리스 `checksums.txt` 기반 SHA256 강제 검증 (`ERR_CHECKSUM_MISMATCH`)
 - 설치/적용/모델 전환 단계의 트랜잭션 실행 및 보상 롤백
-- `launchctl` 실패를 경고로 숨기지 않고 에러 코드로 명시 반환
+- 서비스 매니저 실패(macOS: `launchctl`, Linux: `systemctl --user`)를 경고로 숨기지 않고 에러 코드로 명시 반환
 - 런타임 모드 분리: `proxy/service` 명령은 `runtime_mode=gateway`에서만 허용, `runtime_mode=native-cleanup`은 cleanup 전용, `runtime_mode=native-direct`는 로컬 프록시 없는 direct 벤더 경로
 - Codex 모델 입력 별칭(`codex`/`codex-spark`/`spark`)은 canonical ID로 정규화되며, Codex 스코프에서 Claude selector 모델은 upstream 대상으로 거부되고, 프록시 alias 매핑으로 Claude 스타일 selector는 구성된 Codex 모델로 라우팅됨
 - 스냅샷+해시 검증 기반 Claude 설정 복원, 반복 적용(`apply`/`use`)에서도 최초 검증 기준점을 유지해 `claude revert` 시 원본 복원 보장
@@ -319,7 +325,7 @@ ccb gateway serve --config <path>
 - `vendors/<vendor>/profiles/<profile>/auth/`
 - `vendors/<vendor>/profiles/<profile>/logs/app.log`
 - `vendors/<vendor>/profiles/<profile>/proxy/`
-- `vendors/<vendor>/profiles/<profile>/launchd/`
+- `vendors/<vendor>/profiles/<profile>/launchd/` (macOS) 또는 `vendors/<vendor>/profiles/<profile>/systemd/` (Linux)
 - `vendors/<vendor>/profiles/<profile>/snapshots/`
 
 ## 설정 스키마
@@ -346,7 +352,7 @@ settings_path: "/path/to/project/.claude/settings.json"
 ## CI 및 릴리스
 
 - CI: `.github/workflows/ci.yml` (`go vet`, `go test`, `go test -race`)
-- 릴리스: `.github/workflows/release.yml` (darwin `amd64/arm64` 바이너리 + `checksums.txt` 업로드)
+- 릴리스: `.github/workflows/release.yml` (darwin `amd64/arm64` + linux `amd64/arm64` 바이너리 + `checksums.txt` 업로드)
 
 ## 빌드 및 테스트
 
@@ -409,15 +415,33 @@ ccb service start --vendor codex --profile default
 ccb doctor --vendor codex --profile default
 ```
 
-### `service install` 중간 실패 후 launchd 상태가 꼬여 보이는 경우
+### `service install` 중간 실패 후 서비스 매니저 상태가 꼬여 보이는 경우
 
-`v0.2.4`부터는 `service install` 실패 시 내부적으로 정리(두 label bootout + plist 제거)를 수행한 뒤 에러를 반환합니다.
+**macOS:** `v0.2.4`부터는 `service install` 실패 시 내부적으로 정리(두 label bootout + plist 제거)를 수행한 뒤 에러를 반환합니다.
 수동 `launchctl load` 대신 표준 복구 체인을 다시 실행하세요.
 
 ```bash
 ccb service install --vendor codex --profile default
 ccb service start --vendor codex --profile default
 ccb doctor --vendor codex --profile default
+```
+
+**Linux:** `service install` 중간 실패 시 stale systemd unit이 남을 수 있습니다. 표준 복구 체인으로 정리됩니다:
+
+```bash
+ccb service install --vendor codex --profile default
+ccb service start --vendor codex --profile default
+ccb doctor --vendor codex --profile default
+```
+
+unit이 계속 stuck 상태라면 수동 리셋 후 재시도하세요:
+
+```bash
+systemctl --user stop ccgateway-codex-default-proxy.service 2>/dev/null
+systemctl --user disable ccgateway-codex-default-proxy.service 2>/dev/null
+systemctl --user daemon-reload
+ccb service install --vendor codex --profile default
+ccb service start --vendor codex --profile default
 ```
 
 ### `ERR_POLICY_VIOLATION` 발생
@@ -428,13 +452,25 @@ codex strict 정책 가드가 명령을 차단한 상태입니다. 기본 복구
 ccb setup --vendor codex --profile default --settings-layer project
 ```
 
-### `ERR_LAUNCHCTL_FAILED` + `Could not find service ... sync`
+### macOS: `ERR_LAUNCHCTL_FAILED` + `Could not find service ... sync`
 
 해당 시그니처도 `setup`에서 1회 자동 재시도합니다. 그래도 실패하면 먼저 service install을 다시 실행하세요.
 
 ```bash
 ccb service install --vendor codex --profile default
 ccb service start --vendor codex --profile default
+```
+
+### Linux: `ERR_SYSTEMD_FAILED` + `Unit not found` 또는 `Failed to start`
+
+user linger가 활성화되어 있고 systemd 사용자 세션이 사용 가능한지 확인하세요:
+
+```bash
+loginctl enable-linger "$(whoami)"
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+ccb service install --vendor codex --profile default
+ccb service start --vendor codex --profile default
+ccb doctor --vendor codex --profile default
 ```
 
 ### tool 파라미터 누락 반복 (`input: {}` + required parameter missing)
