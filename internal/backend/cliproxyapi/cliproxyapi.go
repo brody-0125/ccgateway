@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 
 	"ccgateway/internal/backend"
@@ -38,7 +39,7 @@ func (artifactInstaller) Install(_ context.Context, rt backend.Runtime, version 
 	res, err := installer.Install(proxy.InstallOptions{
 		Version:     version,
 		Destination: rt.Paths.ProxyBinary,
-		OS:          "darwin",
+		OS:          runtime.GOOS,
 		Arch:        "",
 	})
 	if err != nil {
