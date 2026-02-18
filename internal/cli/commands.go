@@ -30,6 +30,7 @@ import (
 	"ccgateway/internal/provider"
 	"ccgateway/internal/providers"
 	"ccgateway/internal/scope"
+	"ccgateway/internal/service"
 	"ccgateway/internal/settingsguard"
 	"ccgateway/internal/state"
 )
@@ -787,9 +788,9 @@ func (a *application) cmdService(args []string) error {
 			return err
 		}
 	}
-	mgr := launchd.NewManager()
+	mgr := service.NewManager()
 	proxyLabel, syncLabel := serviceLabelsForRuntime(rt, a.username)
-	proxyPlistPath, syncPlistPath := launchAgentPlistPaths(rt.Paths, proxyLabel, syncLabel)
+	proxyUnitPath, syncUnitPath := service.UnitPaths(a.home, rt.Paths.ProxyPlistPath, rt.Paths.SyncPlistPath, proxyLabel, syncLabel)
 	if err := requireGatewayProxyMode(rt, "service command"); err != nil {
 		return err
 	}
@@ -806,18 +807,18 @@ func (a *application) cmdService(args []string) error {
 		if err != nil {
 			return cberr.Wrap(cberr.ErrInvalidConfig, "failed to resolve executable path", err)
 		}
-		files := launchd.AgentFiles{
-			ProxyPlistPath: proxyPlistPath,
-			SyncPlistPath:  syncPlistPath,
-			ProxyBinary:    rt.Paths.ProxyBinary,
-			ProxyConfig:    rt.Paths.ProxyConfig,
-			ProxyLog:       rt.Paths.ProxyLogPath,
-			SyncLog:        rt.Paths.SyncLogPath,
-			SyncScript:     rt.Paths.SyncScriptPath,
-			AuthSource:     rt.Config.AuthSource,
-			HomeDir:        a.home,
-			ProxyLabel:     proxyLabel,
-			SyncLabel:      syncLabel,
+		files := service.ServiceFiles{
+			ProxyUnitPath: proxyUnitPath,
+			SyncUnitPath:  syncUnitPath,
+			ProxyBinary:   rt.Paths.ProxyBinary,
+			ProxyConfig:   rt.Paths.ProxyConfig,
+			ProxyLog:      rt.Paths.ProxyLogPath,
+			SyncLog:       rt.Paths.SyncLogPath,
+			SyncScript:    rt.Paths.SyncScriptPath,
+			AuthSource:    rt.Config.AuthSource,
+			HomeDir:       a.home,
+			ProxyLabel:    proxyLabel,
+			SyncLabel:     syncLabel,
 		}
 		prevState := rt.State
 		tx := installtx.New(func(step string) error {
@@ -835,13 +836,13 @@ func (a *application) cmdService(args []string) error {
 			_ = os.Remove(rt.Paths.SyncScriptPath)
 			return nil
 		})
-		tx.Add("service.install.launchd", func() error {
-			if err := mgr.InstallAgents(files); err != nil {
-				return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to install launch agents", err)
+		tx.Add("service.install", func() error {
+			if err := mgr.Install(files); err != nil {
+				return cberr.Wrap(cberr.ErrServiceFailed, "failed to install services", err)
 			}
 			return nil
 		}, func() error {
-			return mgr.RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath)
+			return mgr.Remove(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath)
 		})
 		tx.Add("service.update.state", func() error {
 			rt.State.Service.ProxyLabel = proxyLabel
@@ -873,7 +874,7 @@ func (a *application) cmdService(args []string) error {
 					return nil
 				}
 			}
-			return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to start service", err)
+			return cberr.Wrap(cberr.ErrServiceFailed, "failed to start service", err)
 		}
 		if err := waitForBackendHealth(rt, 8*time.Second, 250*time.Millisecond); err != nil {
 			stopErr := mgr.Stop(proxyLabel, syncLabel)
@@ -906,7 +907,7 @@ func (a *application) cmdService(args []string) error {
 		return nil
 	case "stop":
 		if err := mgr.Stop(proxyLabel, syncLabel); err != nil {
-			return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to stop service", err)
+			return cberr.Wrap(cberr.ErrServiceFailed, "failed to stop service", err)
 		}
 		rt.State.Service.Running = false
 		if err := state.Save(rt.Paths.StatePath, rt.State); err != nil {
@@ -921,7 +922,7 @@ func (a *application) cmdService(args []string) error {
 		}
 		status, err := mgr.Status(proxyLabel, syncLabel)
 		if err != nil {
-			return cberr.Wrap(cberr.ErrLaunchctlFailed, "failed to read launchd status", err)
+			return cberr.Wrap(cberr.ErrServiceFailed, "failed to read service status", err)
 		}
 		healthErr := rt.Backend.Health.Check(context.Background(), toBackendRuntime(rt))
 		fmt.Printf("scope: %s\n", ref.ScopeID())
