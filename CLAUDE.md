@@ -111,6 +111,14 @@ Cleanup transition (gateway -> native-cleanup) only:
 - `model switch` is active-scope-only. If needed, switch scope first with `ccb use --vendor "$VENDOR" --profile "$PROFILE"`.
 - `model switch` enforces active snapshot/generation consistency during apply and tail verification; if active changed concurrently, switch fails with rollback.
 - For `vendor=codex`, do not pass Claude selectors (`claude-*`, `opus`, `sonnet`, `haiku`) into `--model`; those are rejected by policy.
+- For intentional cross-vendor switching (e.g. switching from Codex to Claude for a different task), prefer `ccb scope switch`:
+  `ccb scope switch --from codex:default --to claude:default --model claude-opus-4-6`
+- Use `--dry-run` to validate a scope switch before executing:
+  `ccb scope switch --from codex:default --to claude:default --model claude-opus-4-6 --dry-run`
+- `scope switch` is source-active-only (like failover); the `--from` scope must be the currently active scope.
+- `scope switch` uses `installtx.Transaction` for atomic rollback; on any step failure the entire operation reverts.
+- `scope switch` supports same-vendor switching with different profiles (e.g. `codex:default` → `codex:work`) as an alternative to `use` + `model switch` when both scope activation and model change are needed in one step.
+- `scope switch` rejects same-scope switching (`--from` and `--to` must differ); for same-scope model changes, use `ccb model switch`.
 - If Codex quota/token is exhausted and user wants Claude Opus/Sonnet fallback, prefer cross-vendor failover:
   `ccb failover --from codex:default --to claude:default --model claude-opus-4-6`
 - Before executing failover, run preflight first:

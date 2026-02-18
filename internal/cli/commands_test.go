@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"os"
@@ -2905,11 +2906,19 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 	t.Setenv("CCB_CWD", tmpHome)
 	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
 
+	// Allocate port for proxy mock.
+	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
+	if probeErr != nil {
+		t.Fatalf("allocate free port failed: %v", probeErr)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
 		t.Fatalf("mkdir auth source dir failed: %v", err)
 	}
-	if err := os.WriteFile(authSource, []byte("{\"token\":\"ok\"}\n"), 0o600); err != nil {
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
 		t.Fatalf("write auth source failed: %v", err)
 	}
 
@@ -2944,6 +2953,34 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 	}
 	app.registry = reg
 	app.backendRegistry = backendReg
+
+	// Pre-bootstrap with known port so setup reuses it, then start mock server.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--runtime-mode", "gateway",
+		"--gateway-backend", "stub-backend",
+		"--port", strconv.Itoa(port),
+	}); err != nil {
+		t.Fatalf("pre-bootstrap codex failed: %v", err)
+	}
+
+	ln, listenErr := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if listenErr != nil {
+		t.Fatalf("listen on proxy port failed: %v", listenErr)
+	}
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("{\"object\":\"list\",\"data\":[]}"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}),
+	}
+	go func() { _ = srv.Serve(ln) }()
+	defer func() { _ = srv.Close() }()
 
 	if err := app.cmdSetup([]string{
 		"--vendor", "codex",
@@ -3073,6 +3110,933 @@ func TestHandoffCreateWritesMarkdownBundle(t *testing.T) {
 	}
 	if !strings.Contains(text, "ccb failover --from codex:default --to claude:default --model claude-opus-4-6") {
 		t.Fatalf("expected failover command in handoff bundle, got: %s", text)
+	}
+}
+
+func TestScopeSwitchCodexToClaudeNativeDirectSuccess(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	fromRef := scope.MustRef("codex", "default")
+	if err := app.cmdBootstrap([]string{"--vendor", fromRef.VendorID, "--profile", fromRef.ProfileID}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("scope switch failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(tmpHome, tmpHome, fromRef)
+	active, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active failed: %v", err)
+	}
+	if active.ActiveVendor != "claude" || active.ActiveProfile != "default" {
+		t.Fatalf("unexpected active scope after scope switch: %+v", active)
+	}
+	if strings.TrimSpace(active.ActiveGeneration) == "" {
+		t.Fatalf("expected non-empty active generation after scope switch: %+v", active)
+	}
+
+	targetRef := scope.MustRef("claude", "default")
+	targetRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime failed: %v", err)
+	}
+	if targetRT.Config.RuntimeMode != config.RuntimeModeNativeDirect {
+		t.Fatalf("expected runtime_mode=%s, got %s", config.RuntimeModeNativeDirect, targetRT.Config.RuntimeMode)
+	}
+	if targetRT.Config.Model != "claude-opus-4-6" {
+		t.Fatalf("expected target model claude-opus-4-6, got %q", targetRT.Config.Model)
+	}
+	if !targetRT.State.Claude.Applied {
+		t.Fatalf("expected target state applied=true after scope switch: %+v", targetRT.State.Claude)
+	}
+	if targetRT.State.Claude.AppliedGeneration != active.ActiveGeneration {
+		t.Fatalf("expected generation sync: active=%s state=%s", active.ActiveGeneration, targetRT.State.Claude.AppliedGeneration)
+	}
+
+	// Verify settings file content written by Apply.
+	settingsBody, readErr := os.ReadFile(targetRT.Config.SettingsPath)
+	if readErr != nil {
+		t.Fatalf("failed to read settings file %s: %v", targetRT.Config.SettingsPath, readErr)
+	}
+	var settingsMap map[string]any
+	if err := json.Unmarshal(settingsBody, &settingsMap); err != nil {
+		t.Fatalf("failed to parse settings JSON: %v", err)
+	}
+	if m, _ := settingsMap["model"].(string); m != "claude-opus-4-6" {
+		t.Fatalf("settings file model mismatch: got %q, want %q", m, "claude-opus-4-6")
+	}
+	// native-direct should NOT have local proxy ANTHROPIC_BASE_URL.
+	if env, _ := settingsMap["env"].(map[string]any); env != nil {
+		if baseURL, _ := env["ANTHROPIC_BASE_URL"].(string); strings.Contains(baseURL, "127.0.0.1") {
+			t.Fatalf("native-direct settings should not contain local proxy ANTHROPIC_BASE_URL, got %q", baseURL)
+		}
+	}
+}
+
+func TestScopeSwitchDryRunDoesNotMutate(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	fromRef := scope.MustRef("codex", "default")
+	if err := app.cmdBootstrap([]string{"--vendor", fromRef.VendorID, "--profile", fromRef.ProfileID}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(tmpHome, tmpHome, fromRef)
+	activeBefore, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active before dry-run failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+		"--dry-run",
+	}); err != nil {
+		t.Fatalf("scope switch dry-run failed: %v", err)
+	}
+
+	activeAfter, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active after dry-run failed: %v", err)
+	}
+	if activeBefore.ActiveVendor != activeAfter.ActiveVendor || activeBefore.ActiveProfile != activeAfter.ActiveProfile {
+		t.Fatalf("dry-run mutated active pointer: before=%+v after=%+v", activeBefore, activeAfter)
+	}
+
+	targetPaths := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("claude", "default"))
+	if _, statErr := os.Stat(targetPaths.ScopeDir); !os.IsNotExist(statErr) {
+		t.Fatalf("dry-run should not create target scope, stat err=%v", statErr)
+	}
+}
+
+func TestScopeSwitchRejectsInactiveSource(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap codex failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "claude", "--profile", "default", "--runtime-mode", "native-direct"}); err != nil {
+		t.Fatalf("bootstrap claude failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "claude:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch to reject inactive source")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchValidation {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsBadModel(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "codex:backup",
+		"--model", "claude-opus-4-6",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch to reject claude model for codex target")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRollsBackOnDoctorFailure(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	var revertCalls int32
+	reg := provider.NewRegistry()
+	if err := reg.Register(providercodex.NewBundle()); err != nil {
+		t.Fatalf("register codex provider failed: %v", err)
+	}
+	if err := reg.Register(provider.Bundle{
+		VendorID:     "claude",
+		RuntimeModes: []string{string(config.RuntimeModeNativeDirect)},
+		Capabilities: map[provider.Capability]bool{
+			provider.CapabilityClaude: true,
+		},
+		Claude: &countingClaudePatcher{revertCalls: &revertCalls},
+	}); err != nil {
+		t.Fatalf("register claude provider failed: %v", err)
+	}
+
+	app := &application{
+		home:            tmpHome,
+		cwd:             tmpHome,
+		username:        "tester",
+		registry:        reg,
+		backendRegistry: backends.DefaultRegistry(),
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+
+	settingsPath := filepath.Join(tmpHome, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir settings dir failed: %v", err)
+	}
+	originalSettings := []byte("{\n  \"env\": {\n    \"CUSTOM\": \"keep\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, originalSettings, 0o600); err != nil {
+		t.Fatalf("write original settings failed: %v", err)
+	}
+
+	err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch failure due doctor validation")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchFailed && code != cberr.ErrRollbackFailed {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+
+	activePath := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("codex", "default")).ActivePath
+	active, loadErr := control.LoadActive(activePath)
+	if loadErr != nil {
+		t.Fatalf("load active failed: %v", loadErr)
+	}
+	if active.ActiveVendor != "codex" || active.ActiveProfile != "default" {
+		t.Fatalf("expected active pointer restored to source scope, got: %+v", active)
+	}
+
+	targetScopeDir := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("claude", "default")).ScopeDir
+	if _, statErr := os.Stat(targetScopeDir); !os.IsNotExist(statErr) {
+		t.Fatalf("expected target scope rollback removal, stat err=%v", statErr)
+	}
+
+	restored, readErr := os.ReadFile(settingsPath)
+	if readErr != nil {
+		t.Fatalf("read restored settings failed: %v", readErr)
+	}
+	if string(restored) != string(originalSettings) {
+		t.Fatalf("expected settings restored after rollback\nwant:\n%s\ngot:\n%s", string(originalSettings), string(restored))
+	}
+	if atomic.LoadInt32(&revertCalls) == 0 {
+		t.Fatal("expected provider-specific revert to be invoked during scope switch rollback")
+	}
+}
+
+func TestScopeSwitchRoundtripCodexClaudeCodex(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	// Allocate port for proxy mock.
+	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
+	if probeErr != nil {
+		t.Fatalf("allocate free port failed: %v", probeErr)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: "stub-backend",
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	reg := provider.NewRegistry()
+	codexBundle := providercodex.NewBundle()
+	codexBundle.Auth = noopAuthStrategy{}
+	if err := reg.Register(codexBundle); err != nil {
+		t.Fatalf("register codex provider failed: %v", err)
+	}
+	if err := reg.Register(providerclaude.NewBundle()); err != nil {
+		t.Fatalf("register claude provider failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.registry = reg
+	app.backendRegistry = backendReg
+
+	// Pre-bootstrap with known port, then start mock server for doctor.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--runtime-mode", "gateway",
+		"--gateway-backend", "stub-backend",
+		"--port", strconv.Itoa(port),
+	}); err != nil {
+		t.Fatalf("pre-bootstrap codex failed: %v", err)
+	}
+
+	ln, listenErr := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if listenErr != nil {
+		t.Fatalf("listen on proxy port failed: %v", listenErr)
+	}
+	srvMock := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("{\"object\":\"list\",\"data\":[]}"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}),
+	}
+	go func() { _ = srvMock.Serve(ln) }()
+	defer func() { _ = srvMock.Close() }()
+
+	if err := app.cmdSetup([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--runtime-mode", "gateway",
+		"--gateway-backend", "stub-backend",
+	}); err != nil {
+		t.Fatalf("codex setup failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("codex->claude scope switch failed: %v", err)
+	}
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "claude:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	}); err != nil {
+		t.Fatalf("claude->codex scope switch failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("codex", "default"))
+	active, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active failed: %v", err)
+	}
+	if active.ActiveVendor != "codex" || active.ActiveProfile != "default" {
+		t.Fatalf("unexpected active scope after roundtrip scope switch: %+v", active)
+	}
+	if strings.TrimSpace(active.ActiveGeneration) == "" {
+		t.Fatalf("expected non-empty active generation after roundtrip: %+v", active)
+	}
+}
+
+func TestScopeSwitchRejectsNativeCleanupTarget(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "cleanup", "--runtime-mode", "gateway"}); err != nil {
+		t.Fatalf("bootstrap gateway for cleanup target failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "cleanup", "--runtime-mode", "native-cleanup"}); err != nil {
+		t.Fatalf("bootstrap cleanup target failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "codex:cleanup",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch to reject native-cleanup target")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidConfig {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchExistingTargetPreservesConfig(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "claude", "--profile", "default", "--runtime-mode", "native-direct"}); err != nil {
+		t.Fatalf("bootstrap target failed: %v", err)
+	}
+
+	targetRef := scope.MustRef("claude", "default")
+	beforeRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime before switch failed: %v", err)
+	}
+	expectedMode := beforeRT.Config.RuntimeMode
+	expectedSettingsLayer := beforeRT.Config.SettingsLayer
+	expectedSettingsPath := beforeRT.Config.SettingsPath
+
+	if err := app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("scope switch failed: %v", err)
+	}
+
+	afterRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime after switch failed: %v", err)
+	}
+	if afterRT.Config.RuntimeMode != expectedMode {
+		t.Fatalf("expected runtime_mode preserved, got %s (want %s)", afterRT.Config.RuntimeMode, expectedMode)
+	}
+	if afterRT.Config.SettingsLayer != expectedSettingsLayer {
+		t.Fatalf("expected settings_layer preserved, got %s (want %s)", afterRT.Config.SettingsLayer, expectedSettingsLayer)
+	}
+	if afterRT.Config.SettingsPath != expectedSettingsPath {
+		t.Fatalf("expected settings_path preserved, got %s (want %s)", afterRT.Config.SettingsPath, expectedSettingsPath)
+	}
+	if afterRT.Config.Model != "claude-opus-4-6" {
+		t.Fatalf("expected model updated, got %q", afterRT.Config.Model)
+	}
+}
+
+func TestScopeSwitchRejectsNoArgs(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdScope([]string{}); err == nil {
+		t.Fatal("expected error for scope with no args")
+	}
+}
+
+func TestScopeSwitchRejectsInvalidSubcommand(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	err = app.cmdScope([]string{"foo"})
+	if err == nil {
+		t.Fatal("expected error for unknown scope subcommand")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeCommandAcceptsDashHelp(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdScope([]string{"-h"}); err != nil {
+		t.Fatalf("scope -h should not error: %v", err)
+	}
+	if err := app.cmdScope([]string{"--help"}); err != nil {
+		t.Fatalf("scope --help should not error: %v", err)
+	}
+}
+
+func TestScopeSwitchRejectsMissingFromFlag(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch", "--to", "claude:default", "--model", "claude-opus-4-6"})
+	if err == nil {
+		t.Fatal("expected error for missing --from")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsMissingModelFlag(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch", "--from", "codex:default", "--to", "claude:default"})
+	if err == nil {
+		t.Fatal("expected error for missing --model")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsMissingToFlag(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch", "--from", "codex:default", "--model", "claude-opus-4-6"})
+	if err == nil {
+		t.Fatal("expected error for missing --to")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchRejectsExtraArgs(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "claude:default",
+		"--model", "claude-opus-4-6",
+		"extra-arg",
+	})
+	if err == nil {
+		t.Fatal("expected error for extra positional arguments")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "unexpected arguments") {
+		t.Fatalf("expected 'unexpected arguments' in error, got: %v", err)
+	}
+}
+
+func TestScopeSwitchRejectsSameScope(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{"--vendor", "codex", "--profile", "default"}); err != nil {
+		t.Fatalf("bootstrap failed: %v", err)
+	}
+	err = app.cmdScope([]string{"switch",
+		"--from", "codex:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected error for same-scope switch")
+	}
+	if code := cberr.Code(err); code != cberr.ErrInvalidArgs {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+}
+
+func TestScopeSwitchGatewayTargetSuccess(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	// Allocate a free port for the proxy mock.
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("allocate free port failed: %v", err)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	_ = probe.Close()
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: config.DefaultGatewayBackend,
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.backendRegistry = backendReg
+
+	// Source: native-direct Claude scope.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "default",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdUse([]string{"--vendor", "claude", "--profile", "default"}); err != nil {
+		t.Fatalf("use source failed: %v", err)
+	}
+
+	// Pre-bootstrap codex target as gateway with known port so we can mock it.
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "codex",
+		"--profile", "default",
+		"--port", strconv.Itoa(port),
+	}); err != nil {
+		t.Fatalf("pre-bootstrap target failed: %v", err)
+	}
+
+	// Start HTTP mock server on the proxy port for doctor health check.
+	ln, listenErr := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	if listenErr != nil {
+		t.Fatalf("listen on proxy port failed: %v", listenErr)
+	}
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/models" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("{\"object\":\"list\",\"data\":[]}"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}),
+	}
+	go func() { _ = srv.Serve(ln) }()
+	defer func() { _ = srv.Close() }()
+
+	// Activate claude:default as source, then switch to gateway codex target.
+	if err := app.cmdScope([]string{"switch",
+		"--from", "claude:default",
+		"--to", "codex:default",
+		"--model", "gpt-5.3-codex",
+	}); err != nil {
+		t.Fatalf("scope switch to gateway target failed: %v", err)
+	}
+
+	// Verify target is active.
+	paths := scope.BuildPaths(tmpHome, tmpHome, scope.MustRef("codex", "default"))
+	active, loadErr := control.LoadActive(paths.ActivePath)
+	if loadErr != nil {
+		t.Fatalf("load active failed: %v", loadErr)
+	}
+	if active.ActiveVendor != "codex" || active.ActiveProfile != "default" {
+		t.Fatalf("expected codex:default active, got %+v", active)
+	}
+
+	// Verify target has gateway runtime mode.
+	targetRef := scope.MustRef("codex", "default")
+	targetRT, err := app.loadRuntime(targetRef, false)
+	if err != nil {
+		t.Fatalf("load target runtime failed: %v", err)
+	}
+	if targetRT.Config.RuntimeMode != config.RuntimeModeGateway {
+		t.Fatalf("expected gateway runtime mode, got %s", targetRT.Config.RuntimeMode)
+	}
+	if targetRT.Config.Model != "gpt-5.3-codex" {
+		t.Fatalf("expected model gpt-5.3-codex, got %q", targetRT.Config.Model)
+	}
+	// Verify proxy binary was installed (artifact step).
+	if _, statErr := os.Stat(targetRT.Paths.ProxyBinary); statErr != nil {
+		t.Fatalf("expected proxy binary at %s, stat err=%v", targetRT.Paths.ProxyBinary, statErr)
+	}
+}
+
+func TestScopeSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"kickstart\" ]]; then\n  sleep 0.25\nfi\nif [[ \"${1:-}\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: config.DefaultGatewayBackend,
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.backendRegistry = backendReg
+
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "source",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "alt",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-sonnet-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap alt failed: %v", err)
+	}
+	if err := app.cmdUse([]string{"--vendor", "claude", "--profile", "source"}); err != nil {
+		t.Fatalf("use source failed: %v", err)
+	}
+
+	paths := scope.BuildPaths(app.home, app.cwd, scope.MustRef("claude", "source"))
+	switchErrCh := make(chan error, 1)
+	go func() {
+		time.Sleep(60 * time.Millisecond)
+		other, err := newApplication()
+		if err != nil {
+			switchErrCh <- err
+			return
+		}
+		other.backendRegistry = backendReg
+		switchErrCh <- other.cmdUse([]string{"--vendor", "claude", "--profile", "alt"})
+	}()
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "claude:source",
+		"--to", "codex:target",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch failure under concurrent source active change")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchFailed && code != cberr.ErrRollbackFailed {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+	if switchErr := <-switchErrCh; switchErr != nil {
+		t.Fatalf("concurrent source switch failed: %v", switchErr)
+	}
+
+	active, err := control.LoadActive(paths.ActivePath)
+	if err != nil {
+		t.Fatalf("load active failed: %v", err)
+	}
+	if active.ActiveVendor != "claude" || active.ActiveProfile != "alt" {
+		t.Fatalf("expected concurrent active scope to remain (claude:alt), got %+v", active)
+	}
+}
+
+func TestScopeSwitchRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
+	tmpHome := t.TempDir()
+	stub := filepath.Join(tmpHome, "launchctl")
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".ccb.codex.target.\"* ]]; then\n    printf 'simulated target kickstart failure\\n' >&2\n    exit 91\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
+		t.Fatalf("write launchctl stub failed: %v", err)
+	}
+
+	t.Setenv("CCB_HOME", tmpHome)
+	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+
+	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
+		t.Fatalf("mkdir auth source dir failed: %v", err)
+	}
+	if err := os.WriteFile(authSource, []byte("{\"tokens\":{\"access_token\":\"test-token\"},\"last_refresh\":\"1700000000\"}\n"), 0o600); err != nil {
+		t.Fatalf("write auth source failed: %v", err)
+	}
+
+	backendReg := backend.NewRegistry()
+	if err := backendReg.Register(backend.Bundle{
+		ID: config.DefaultGatewayBackend,
+		Capabilities: map[backend.Capability]bool{
+			backend.CapabilityArtifact: true,
+			backend.CapabilityProxy:    true,
+			backend.CapabilityHealth:   true,
+		},
+		Artifact: fakeBackendArtifactInstaller{},
+		Proxy:    noopBackendProxyRenderer{},
+		Health:   noopBackendHealthChecker{},
+	}); err != nil {
+		t.Fatalf("register backend failed: %v", err)
+	}
+
+	app, err := newApplication()
+	if err != nil {
+		t.Fatalf("newApplication failed: %v", err)
+	}
+	app.backendRegistry = backendReg
+
+	if err := app.cmdBootstrap([]string{
+		"--vendor", "claude",
+		"--profile", "source",
+		"--runtime-mode", string(config.RuntimeModeNativeDirect),
+		"--model", "claude-opus-4-6",
+	}); err != nil {
+		t.Fatalf("bootstrap source failed: %v", err)
+	}
+	if err := app.cmdUse([]string{"--vendor", "claude", "--profile", "source"}); err != nil {
+		t.Fatalf("use source scope failed: %v", err)
+	}
+
+	err = app.cmdScope([]string{"switch",
+		"--from", "claude:source",
+		"--to", "codex:target",
+		"--model", "gpt-5.3-codex",
+	})
+	if err == nil {
+		t.Fatal("expected scope switch failure from target gateway start error")
+	}
+	if code := cberr.Code(err); code != cberr.ErrSwitchFailed && code != cberr.ErrRollbackFailed {
+		t.Fatalf("unexpected error code: %s (%v)", code, err)
+	}
+
+	targetRef := scope.MustRef("codex", "target")
+	targetPaths := scope.BuildPaths(app.home, app.cwd, targetRef)
+	if _, statErr := os.Stat(targetPaths.ScopeDir); !os.IsNotExist(statErr) {
+		t.Fatalf("expected target scope removal after rollback, stat err=%v", statErr)
+	}
+
+	proxyLabel, syncLabel := targetRef.Labels(app.username)
+	proxyPlist := filepath.Join(targetPaths.LaunchAgentDir, proxyLabel+".plist")
+	syncPlist := filepath.Join(targetPaths.LaunchAgentDir, syncLabel+".plist")
+	if _, statErr := os.Stat(proxyPlist); !os.IsNotExist(statErr) {
+		t.Fatalf("expected proxy plist cleanup after rollback, stat err=%v", statErr)
+	}
+	if _, statErr := os.Stat(syncPlist); !os.IsNotExist(statErr) {
+		t.Fatalf("expected sync plist cleanup after rollback, stat err=%v", statErr)
 	}
 }
 
