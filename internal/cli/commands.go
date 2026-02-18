@@ -117,6 +117,8 @@ func (a *application) run(args []string) error {
 		return a.cmdStatus(args[1:])
 	case "model":
 		return a.cmdModel(args[1:])
+	case "scope":
+		return a.cmdScope(args[1:])
 	case "preflight":
 		return a.cmdPreflight(args[1:])
 	case "handoff":
@@ -2111,56 +2113,13 @@ func (a *application) cmdFailover(args []string) error {
 		prevToState = prevRT.State
 	}
 
-	var rollbackTargetRT *runtime
-	targetBootstrapApplied := false
-	restoreTargetScope := func() error {
-		var restoreErrs []error
-		if rollbackTargetRT != nil && isGatewayProxyMode(*rollbackTargetRT) {
-			mgr := launchd.NewManager()
-			proxyLabel, syncLabel := serviceLabelsForRuntime(*rollbackTargetRT, a.username)
-			proxyPlistPath, syncPlistPath := launchAgentPlistPaths(rollbackTargetRT.Paths, proxyLabel, syncLabel)
-			if err := mgr.RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath); err != nil {
-				restoreErrs = append(restoreErrs, fmt.Errorf("failed to cleanup target launch agents: %w", err))
-			}
-		}
-		if !toScopeExisted {
-			if err := os.RemoveAll(toPaths.ScopeDir); err != nil {
-				restoreErrs = append(restoreErrs, fmt.Errorf("failed to remove new target scope: %w", err))
-			}
-			if len(restoreErrs) > 0 {
-				return stderrors.Join(restoreErrs...)
-			}
-			return nil
-		}
-		if err := config.Save(toPaths.ConfigPath, prevToCfg); err != nil {
-			restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target config: %w", err))
-		}
-		if err := state.Save(toPaths.StatePath, prevToState); err != nil {
-			restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target state: %w", err))
-		}
-		if targetBootstrapApplied && prevToCfg.RuntimeMode == config.RuntimeModeGateway && prevToCfg.ProxyEnabled {
-			if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
-				return a.cmdService([]string{"install", "--vendor", toRef.VendorID, "--profile", toRef.ProfileID})
-			}); err != nil {
-				restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target gateway service install: %w", err))
-			} else if prevToState.Service.Running {
-				if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
-					return a.cmdService([]string{"start", "--vendor", toRef.VendorID, "--profile", toRef.ProfileID})
-				}); err != nil {
-					restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target gateway service start: %w", err))
-				}
-			} else {
-				if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
-					return a.cmdService([]string{"stop", "--vendor", toRef.VendorID, "--profile", toRef.ProfileID})
-				}); err != nil {
-					restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target gateway service stop: %w", err))
-				}
-			}
-		}
-		if len(restoreErrs) > 0 {
-			return stderrors.Join(restoreErrs...)
-		}
-		return nil
+	restorer := &targetScopeRestorer{
+		app:            a,
+		toRef:          toRef,
+		toPaths:        toPaths,
+		toScopeExisted: toScopeExisted,
+		prevToCfg:      prevToCfg,
+		prevToState:    prevToState,
 	}
 
 	targetDefaults := config.DefaultForScope(a.home, a.cwd, toRef.VendorID, toRef.ProfileID)
@@ -2193,33 +2152,39 @@ func (a *application) cmdFailover(args []string) error {
 	if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
 		return a.cmdBootstrap(bootstrapArgs)
 	}); err != nil {
-		if restoreErr := restoreTargetScope(); restoreErr != nil {
+		if restoreErr := restorer.restore(); restoreErr != nil {
 			return cberr.Wrap(cberr.ErrRollbackFailed, "failover target bootstrap failed and rollback failed", fmt.Errorf("bootstrap error: %v; rollback error: %w", err, restoreErr))
 		}
 		return cberr.Wrap(cberr.ErrSwitchFailed, "failover target bootstrap failed", err)
 	}
-	targetBootstrapApplied = true
+	restorer.targetBootstrapApplied = true
 
 	toRT, err := a.loadRuntime(toRef, false)
 	if err != nil {
+		_ = restorer.restore()
 		return err
 	}
-	rollbackTargetRT = &toRT
+	restorer.rollbackTargetRT = &toRT
 	if err := a.enforcePolicy(toRT, "failover target"); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	if toRT.Config.RuntimeMode == config.RuntimeModeNativeCleanup {
+		_ = restorer.restore()
 		return cberr.New(cberr.ErrInvalidConfig, fmt.Sprintf("target scope runtime_mode=%s is cleanup-only and cannot be failover target", config.RuntimeModeNativeCleanup))
 	}
 	if err := a.ensureProviderCapability(toRT, provider.CapabilityClaude); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 	if err := ensureScopedSettingsBinding(toRT, "failover target"); err != nil {
+		_ = restorer.restore()
 		return err
 	}
 
 	settingsSnapshotPath, settingsSnapshotSHA, err := snapshotSettingsBackup(toRT.Config.SettingsPath, toRT.Paths.SnapshotsDir, "failover")
 	if err != nil {
+		_ = restorer.restore()
 		return cberr.Wrap(cberr.ErrInvalidConfig, "failed to snapshot current Claude settings before failover", err)
 	}
 
@@ -2236,7 +2201,7 @@ func (a *application) cmdFailover(args []string) error {
 				rollbackErrs = append(rollbackErrs, fmt.Errorf("failed to restore active pointer: %w", err))
 			}
 		}
-		if err := restoreTargetScope(); err != nil {
+		if err := restorer.restore(); err != nil {
 			rollbackErrs = append(rollbackErrs, err)
 		}
 		if len(rollbackErrs) > 0 {
@@ -2298,6 +2263,315 @@ func (a *application) cmdFailover(args []string) error {
 
 	finalRT.Logger.Infof("failover complete from=%s to=%s model=%s", fromRef.ScopeID(), toRef.ScopeID(), normalizedModel)
 	fmt.Printf("failover complete (%s -> %s, model=%s)\n", fromRef.ScopeID(), toRef.ScopeID(), normalizedModel)
+	return nil
+}
+
+func (a *application) cmdScope(args []string) error {
+	if len(args) == 0 {
+		return cberr.New(cberr.ErrInvalidArgs, scopeUsage())
+	}
+	sub := args[0]
+	if isHelpArg(sub) {
+		fmt.Println(scopeUsage())
+		return nil
+	}
+	if sub != "switch" {
+		return cberr.New(cberr.ErrInvalidArgs, scopeUsage())
+	}
+	return a.cmdScopeSwitch(args[1:])
+}
+
+func (a *application) cmdScopeSwitch(args []string) error {
+	fs := flag.NewFlagSet("scope switch", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fromScope := fs.String("from", "", "source scope (vendor:profile)")
+	toScope := fs.String("to", "", "target scope (vendor:profile)")
+	modelName := fs.String("model", "", "target model name")
+	dryRun := fs.Bool("dry-run", false, "validate only, do not execute")
+	if err := fs.Parse(args); err != nil {
+		return parseFlagError(err, scopeUsage(), "failed to parse scope switch flags")
+	}
+	if err := ensureNoExtraArgs(fs, scopeUsage()); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*fromScope) == "" || strings.TrimSpace(*toScope) == "" {
+		return cberr.New(cberr.ErrInvalidArgs, "scope switch requires --from and --to")
+	}
+	fromRef, err := scope.ScopeFromID(*fromScope)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --from scope id", err)
+	}
+	toRef, err := scope.ScopeFromID(*toScope)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --to scope id", err)
+	}
+	if fromRef.ScopeID() == toRef.ScopeID() {
+		return cberr.New(cberr.ErrInvalidArgs, fmt.Sprintf("scope switch requires different --from and --to scopes; for same-scope model change use: ccb model switch --vendor %s --profile %s --model <name>", fromRef.VendorID, fromRef.ProfileID))
+	}
+	normalizedModel, err := modelnorm.NormalizeForVendor(toRef.VendorID, *modelName)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidArgs, "scope switch requires --model", err)
+	}
+
+	// --- Phase 1: Source validation ---
+	fromRT, err := a.loadRuntime(fromRef, false)
+	if err != nil {
+		return err
+	}
+	if err := a.enforcePolicy(fromRT, "scope switch source"); err != nil {
+		return err
+	}
+	if err := a.ensureProviderCapability(fromRT, provider.CapabilityClaude); err != nil {
+		return err
+	}
+
+	activePath := fromRT.Paths.ActivePath
+	prevActive, err := control.LoadActive(activePath)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrInvalidConfig, "failed to load active pointer", err)
+	}
+	if prevActive.ActiveVendor != fromRef.VendorID || prevActive.ActiveProfile != fromRef.ProfileID {
+		activeScope := "<unset>"
+		if strings.TrimSpace(prevActive.ActiveVendor) != "" && strings.TrimSpace(prevActive.ActiveProfile) != "" {
+			activeScope = fmt.Sprintf("%s:%s", prevActive.ActiveVendor, prevActive.ActiveProfile)
+		}
+		return cberr.New(
+			cberr.ErrSwitchValidation,
+			fmt.Sprintf("scope switch is source-active only (active=%s source=%s)", activeScope, fromRef.ScopeID()),
+		)
+	}
+	if err := ensureActiveSwitchContract(prevActive, fromRT.State, fromRef, "scope switch source"); err != nil {
+		return err
+	}
+
+	// --- Phase 1b: Target pre-check ---
+	toPaths := scope.BuildPaths(a.home, a.cwd, toRef)
+	toScopeExisted := false
+	if _, statErr := os.Stat(toPaths.ConfigPath); statErr == nil {
+		toScopeExisted = true
+	} else if !os.IsNotExist(statErr) {
+		return cberr.Wrap(cberr.ErrInvalidConfig, "failed to inspect target scope config", statErr)
+	}
+
+	var prevToCfg config.Config
+	var prevToState state.State
+	if toScopeExisted {
+		prevRT, loadErr := a.loadRuntime(toRef, false)
+		if loadErr != nil {
+			return loadErr
+		}
+		if err := a.enforcePolicy(prevRT, "scope switch target"); err != nil {
+			return err
+		}
+		if prevRT.Config.RuntimeMode == config.RuntimeModeNativeCleanup {
+			return cberr.New(cberr.ErrInvalidConfig, fmt.Sprintf("target scope runtime_mode=%s is cleanup-only and cannot be scope switch target", config.RuntimeModeNativeCleanup))
+		}
+		if err := a.ensureProviderCapability(prevRT, provider.CapabilityClaude); err != nil {
+			return err
+		}
+		if err := ensureScopedSettingsBinding(prevRT, "scope switch target"); err != nil {
+			return err
+		}
+		prevToCfg = prevRT.Config
+		prevToState = prevRT.State
+	}
+
+	// --- Phase 2: Dry-run gate ---
+	if *dryRun {
+		targetStatus := "will be created"
+		if toScopeExisted {
+			targetStatus = "exists"
+		}
+		fmt.Printf("scope switch dry-run: from=%s to=%s model=%s\n", fromRef.ScopeID(), toRef.ScopeID(), normalizedModel)
+		fmt.Printf("[OK] source active contract (gen=%s)\n", strings.TrimSpace(prevActive.ActiveGeneration))
+		fmt.Printf("[OK] source policy\n")
+		fmt.Printf("[OK] target pre-check (%s)\n", targetStatus)
+		fmt.Printf("[OK] model normalization (%s)\n", normalizedModel)
+		fmt.Printf("dry-run passed (pre-validation only) — no changes made\n")
+		fmt.Printf("note: proxy, auth, and service checks run only during actual execution\n")
+		return nil
+	}
+
+	// --- Phase 3: Target setup ---
+	restorer := &targetScopeRestorer{
+		app:            a,
+		toRef:          toRef,
+		toPaths:        toPaths,
+		toScopeExisted: toScopeExisted,
+		prevToCfg:      prevToCfg,
+		prevToState:    prevToState,
+	}
+
+	targetDefaults := config.DefaultForScope(a.home, a.cwd, toRef.VendorID, toRef.ProfileID)
+	targetMode := targetDefaults.RuntimeMode
+	targetBackend := targetDefaults.GatewayBackend
+	targetSettingsLayer := targetDefaults.SettingsLayer
+	targetSettingsPath := targetDefaults.SettingsPath
+	if toScopeExisted {
+		targetMode = prevToCfg.RuntimeMode
+		targetBackend = prevToCfg.GatewayBackend
+		targetSettingsLayer = prevToCfg.SettingsLayer
+		targetSettingsPath = prevToCfg.SettingsPath
+	}
+
+	bootstrapArgs := []string{
+		"--vendor", toRef.VendorID,
+		"--profile", toRef.ProfileID,
+		"--runtime-mode", string(targetMode),
+		"--model", normalizedModel,
+	}
+	if strings.TrimSpace(targetBackend) != "" {
+		bootstrapArgs = append(bootstrapArgs, "--gateway-backend", targetBackend)
+	}
+	if strings.TrimSpace(string(targetSettingsLayer)) != "" {
+		bootstrapArgs = append(bootstrapArgs, "--settings-layer", string(targetSettingsLayer))
+	}
+	if strings.TrimSpace(targetSettingsPath) != "" {
+		bootstrapArgs = append(bootstrapArgs, "--settings-path", targetSettingsPath)
+	}
+
+	if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+		return a.cmdBootstrap(bootstrapArgs)
+	}); err != nil {
+		if restoreErr := restorer.restore(); restoreErr != nil {
+			return cberr.Wrap(cberr.ErrRollbackFailed, "scope switch target bootstrap failed and rollback failed", fmt.Errorf("bootstrap error: %v; rollback error: %w", err, restoreErr))
+		}
+		return cberr.Wrap(cberr.ErrSwitchFailed, "scope switch target bootstrap failed", err)
+	}
+	restorer.targetBootstrapApplied = true
+
+	toRT, err := a.loadRuntime(toRef, false)
+	if err != nil {
+		_ = restorer.restore()
+		return err
+	}
+	restorer.rollbackTargetRT = &toRT
+
+	if err := a.enforcePolicy(toRT, "scope switch target"); err != nil {
+		_ = restorer.restore()
+		return err
+	}
+	if toRT.Config.RuntimeMode == config.RuntimeModeNativeCleanup {
+		_ = restorer.restore()
+		return cberr.New(cberr.ErrInvalidConfig, fmt.Sprintf("target scope runtime_mode=%s is cleanup-only and cannot be scope switch target", config.RuntimeModeNativeCleanup))
+	}
+	if err := a.ensureProviderCapability(toRT, provider.CapabilityClaude); err != nil {
+		_ = restorer.restore()
+		return err
+	}
+	if err := ensureScopedSettingsBinding(toRT, "scope switch target"); err != nil {
+		_ = restorer.restore()
+		return err
+	}
+
+	// --- Phase 4: Transaction ---
+	settingsSnapshotPath, settingsSnapshotSHA, err := snapshotSettingsBackup(toRT.Config.SettingsPath, toRT.Paths.SnapshotsDir, "scope-switch")
+	if err != nil {
+		_ = restorer.restore()
+		return cberr.Wrap(cberr.ErrInvalidConfig, "failed to snapshot current Claude settings before scope switch", err)
+	}
+
+	tx := installtx.New(func(step string) error {
+		current, loadErr := state.Load(toRT.Paths.StatePath)
+		if loadErr != nil {
+			return loadErr
+		}
+		current.LastStep = step
+		if saveErr := state.Save(toRT.Paths.StatePath, current); saveErr != nil {
+			return saveErr
+		}
+		toRT.State = current
+		return nil
+	})
+
+	tx.Add("scope.switch.proxy.setup", func() error {
+		if !isGatewayProxyMode(toRT) {
+			return nil
+		}
+		if _, statErr := os.Stat(toRT.Paths.ProxyBinary); statErr != nil {
+			if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+				return a.cmdProxy([]string{"install", "--vendor", toRef.VendorID, "--profile", toRef.ProfileID})
+			}); err != nil {
+				return cberr.Wrap(cberr.ErrSwitchFailed, "scope switch target proxy install failed", err)
+			}
+		}
+		if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+			return a.cmdAuth([]string{"sync", "--vendor", toRef.VendorID, "--profile", toRef.ProfileID})
+		}); err != nil {
+			return cberr.Wrap(cberr.ErrSwitchFailed, "scope switch target auth sync failed", err)
+		}
+		if err := a.runServiceReconcile(toRef, true); err != nil {
+			return cberr.Wrap(cberr.ErrSwitchFailed, "scope switch target service reconcile failed", err)
+		}
+		return nil
+	}, nil)
+
+	tx.Add("scope.switch.activate", func() error {
+		expectedSourceActive := expectedActiveRequirement{
+			VendorID:   fromRef.VendorID,
+			ProfileID:  fromRef.ProfileID,
+			Generation: strings.TrimSpace(prevActive.ActiveGeneration),
+		}
+		return withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+			return a.cmdUseWithExpected([]string{"--vendor", toRef.VendorID, "--profile", toRef.ProfileID}, &expectedSourceActive)
+		})
+	}, func() error {
+		var rollbackErrs []error
+		if err := toRT.Bundle.Claude.Revert(context.Background(), toProviderRuntime(toRT), settingsSnapshotPath, settingsSnapshotSHA); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("failed to restore settings snapshot: %w", err))
+		}
+		activeNow, activeErr := control.LoadActive(activePath)
+		if activeErr != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("failed to inspect active pointer during rollback: %w", activeErr))
+		} else if activeNow.ActiveVendor == toRef.VendorID && activeNow.ActiveProfile == toRef.ProfileID {
+			if err := control.SaveActive(activePath, prevActive); err != nil {
+				rollbackErrs = append(rollbackErrs, fmt.Errorf("failed to restore active pointer: %w", err))
+			}
+		}
+		if err := restorer.restore(); err != nil {
+			rollbackErrs = append(rollbackErrs, err)
+		}
+		return stderrors.Join(rollbackErrs...)
+	})
+
+	tx.Add("scope.switch.doctor", func() error {
+		return withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+			return a.cmdDoctor([]string{"--vendor", toRef.VendorID, "--profile", toRef.ProfileID})
+		})
+	}, nil)
+
+	tx.Add("scope.switch.verify", func() error {
+		activeAfter, err := control.LoadActive(activePath)
+		if err != nil {
+			return cberr.Wrap(cberr.ErrInvalidConfig, "failed to verify active pointer after scope switch", err)
+		}
+		if activeAfter.ActiveVendor != toRef.VendorID || activeAfter.ActiveProfile != toRef.ProfileID || strings.TrimSpace(activeAfter.ActiveGeneration) == "" {
+			return cberr.New(cberr.ErrSwitchValidation, "scope switch completed but active pointer is inconsistent")
+		}
+		finalRT, err := a.loadRuntime(toRef, false)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(finalRT.Config.Model) != normalizedModel {
+			return cberr.New(cberr.ErrSwitchValidation, fmt.Sprintf("target model mismatch after scope switch (want=%q got=%q)", normalizedModel, finalRT.Config.Model))
+		}
+		return nil
+	}, nil)
+
+	if err := tx.Run(); err != nil {
+		// Always attempt restorer cleanup. When the failing step was before
+		// activate (e.g. proxy.setup), the rollback chain never reaches
+		// activate's Undo. restorer.restore() is idempotent.
+		_ = restorer.restore()
+		var rbErr *installtx.RollbackError
+		if stderrors.As(err, &rbErr) {
+			return cberr.Wrap(cberr.ErrRollbackFailed, "scope switch failed and rollback was required", err)
+		}
+		return cberr.Wrap(cberr.ErrSwitchFailed, "scope switch failed", err)
+	}
+
+	toRT.Logger.Infof("scope switch complete from=%s to=%s model=%s", fromRef.ScopeID(), toRef.ScopeID(), normalizedModel)
+	fmt.Printf("scope switched (%s -> %s, model=%s)\n", fromRef.ScopeID(), toRef.ScopeID(), normalizedModel)
 	return nil
 }
 
@@ -2832,6 +3106,7 @@ func usage() string {
   %s
   %s
   %s
+  %s
   %s`,
 		bootstrapUsage(),
 		setupUsage(),
@@ -2839,6 +3114,7 @@ func usage() string {
 		authSyncUsage(),
 		statusUsage(),
 		modelUsage(),
+		scopeUsage(),
 		failoverUsage(),
 		useUsage(),
 		doctorUsage(),
@@ -2898,6 +3174,10 @@ func preflightUsage() string {
 
 func handoffUsage() string {
 	return "ccb handoff create --from <vendor:profile> --to <vendor:profile> [--model <name>] [--output <path>] [--json]"
+}
+
+func scopeUsage() string {
+	return "ccb scope switch --from <vendor:profile> --to <vendor:profile> --model <name> [--dry-run]"
 }
 
 func failoverUsage() string {
@@ -3381,6 +3661,72 @@ func waitForBackendHealth(rt runtime, timeout, interval time.Duration) error {
 		return lastErr
 	}
 	return fmt.Errorf("healthcheck failed")
+}
+
+type targetScopeRestorer struct {
+	app                    *application
+	toRef                  scope.Ref
+	toPaths                scope.Paths
+	toScopeExisted         bool
+	prevToCfg              config.Config
+	prevToState            state.State
+	rollbackTargetRT       *runtime
+	targetBootstrapApplied bool
+	restored               bool
+}
+
+func (r *targetScopeRestorer) restore() error {
+	if r.restored {
+		return nil
+	}
+	r.restored = true
+	var restoreErrs []error
+	if r.rollbackTargetRT != nil && isGatewayProxyMode(*r.rollbackTargetRT) {
+		mgr := launchd.NewManager()
+		proxyLabel, syncLabel := serviceLabelsForRuntime(*r.rollbackTargetRT, r.app.username)
+		proxyPlistPath, syncPlistPath := launchAgentPlistPaths(r.rollbackTargetRT.Paths, proxyLabel, syncLabel)
+		if err := mgr.RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath); err != nil {
+			restoreErrs = append(restoreErrs, fmt.Errorf("failed to cleanup target launch agents: %w", err))
+		}
+	}
+	if !r.toScopeExisted {
+		if err := os.RemoveAll(r.toPaths.ScopeDir); err != nil {
+			restoreErrs = append(restoreErrs, fmt.Errorf("failed to remove new target scope: %w", err))
+		}
+		if len(restoreErrs) > 0 {
+			return stderrors.Join(restoreErrs...)
+		}
+		return nil
+	}
+	if err := config.Save(r.toPaths.ConfigPath, r.prevToCfg); err != nil {
+		restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target config: %w", err))
+	}
+	if err := state.Save(r.toPaths.StatePath, r.prevToState); err != nil {
+		restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target state: %w", err))
+	}
+	if r.targetBootstrapApplied && r.prevToCfg.RuntimeMode == config.RuntimeModeGateway && r.prevToCfg.ProxyEnabled {
+		if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+			return r.app.cmdService([]string{"install", "--vendor", r.toRef.VendorID, "--profile", r.toRef.ProfileID})
+		}); err != nil {
+			restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target gateway service install: %w", err))
+		} else if r.prevToState.Service.Running {
+			if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+				return r.app.cmdService([]string{"start", "--vendor", r.toRef.VendorID, "--profile", r.toRef.ProfileID})
+			}); err != nil {
+				restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target gateway service start: %w", err))
+			}
+		} else {
+			if err := withEnvOverride(suppressBootstrapOutputEnv, "1", func() error {
+				return r.app.cmdService([]string{"stop", "--vendor", r.toRef.VendorID, "--profile", r.toRef.ProfileID})
+			}); err != nil {
+				restoreErrs = append(restoreErrs, fmt.Errorf("failed to restore target gateway service stop: %w", err))
+			}
+		}
+	}
+	if len(restoreErrs) > 0 {
+		return stderrors.Join(restoreErrs...)
+	}
+	return nil
 }
 
 func isGatewayProxyMode(rt runtime) bool {
