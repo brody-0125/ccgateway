@@ -105,18 +105,18 @@ func (m *Manager) cleanupInstallFailure(files AgentFiles, cause error) error {
 	return fmt.Errorf("%w; cleanup failed: %v", cause, errors.Join(cleanupErrs...))
 }
 
-func (m *Manager) RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath string) error {
+func (m *Manager) RemoveAgents(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath string) error {
 	if err := m.Bootout(proxyLabel); err != nil && !containsNotLoaded(err.Error()) {
 		return err
 	}
 	if err := m.Bootout(syncLabel); err != nil && !containsNotLoaded(err.Error()) {
 		return err
 	}
-	if proxyPlistPath != "" {
-		_ = os.Remove(proxyPlistPath)
+	if proxyUnitPath != "" {
+		_ = os.Remove(proxyUnitPath)
 	}
-	if syncPlistPath != "" {
-		_ = os.Remove(syncPlistPath)
+	if syncUnitPath != "" {
+		_ = os.Remove(syncUnitPath)
 	}
 	return nil
 }
