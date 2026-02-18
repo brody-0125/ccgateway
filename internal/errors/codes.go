@@ -27,6 +27,7 @@ const (
 	ErrChecksumParse      = "ERR_CHECKSUM_PARSE"
 	ErrExtractFailed      = "ERR_EXTRACT_FAILED"
 	ErrLaunchctlFailed    = "ERR_LAUNCHCTL_FAILED"
+	ErrServiceFailed      = "ERR_SERVICE_FAILED"
 	ErrAuthSyncFailed     = "ERR_AUTH_SYNC_FAILED"
 	ErrClaudeApplyFailed  = "ERR_CLAUDE_APPLY_FAILED"
 	ErrClaudeRevertFailed = "ERR_CLAUDE_REVERT_FAILED"
