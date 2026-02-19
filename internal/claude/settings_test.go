@@ -127,3 +127,183 @@ func TestApplyNativeDirectSetsModelAndClearsManagedProxyRouting(t *testing.T) {
 		t.Fatalf("expected custom env preserved, got=%v", got)
 	}
 }
+
+func TestSmartRevertPreservesUserChanges(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"custom\": \"a\",\n  \"env\": {\n    \"MY_VAR\": \"x\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := Apply(settingsPath, snapDir, 18888, "gpt-5.3-codex")
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// Simulate user editing settings after Apply.
+	applied, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read applied failed: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(applied, &doc); err != nil {
+		t.Fatalf("parse applied failed: %v", err)
+	}
+	doc["custom"] = "b"
+	doc["new_key"] = "new"
+	env := doc["env"].(map[string]any)
+	env["MY_VAR"] = "y"
+	edited, _ := json.MarshalIndent(doc, "", "  ")
+	edited = append(edited, '\n')
+	if err := os.WriteFile(settingsPath, edited, 0o600); err != nil {
+		t.Fatalf("write user edits failed: %v", err)
+	}
+
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert failed: %v", err)
+	}
+
+	restored, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read restored failed: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(restored, &result); err != nil {
+		t.Fatalf("parse restored failed: %v", err)
+	}
+
+	// User changes preserved.
+	if result["custom"] != "b" {
+		t.Fatalf("expected custom='b', got=%v", result["custom"])
+	}
+	if result["new_key"] != "new" {
+		t.Fatalf("expected new_key='new', got=%v", result["new_key"])
+	}
+	resEnv, _ := result["env"].(map[string]any)
+	if resEnv["MY_VAR"] != "y" {
+		t.Fatalf("expected MY_VAR='y', got=%v", resEnv["MY_VAR"])
+	}
+
+	// Managed keys removed (were not in original).
+	if _, ok := result["model"]; ok {
+		t.Fatal("expected model removed after smart revert")
+	}
+	for _, key := range ManagedEnvKeys() {
+		if _, ok := resEnv[key]; ok {
+			t.Fatalf("expected managed env key %s removed after smart revert", key)
+		}
+	}
+}
+
+func TestSmartRevertRestoresOriginalManagedKeys(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"model\": \"user-custom\",\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"https://custom.api.com\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := Apply(settingsPath, snapDir, 18888, "gpt-5.3-codex")
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// User adds a non-managed key after Apply.
+	applied, _ := os.ReadFile(settingsPath)
+	var doc map[string]any
+	json.Unmarshal(applied, &doc)
+	doc["theme"] = "dark"
+	edited, _ := json.MarshalIndent(doc, "", "  ")
+	edited = append(edited, '\n')
+	os.WriteFile(settingsPath, edited, 0o600)
+
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(settingsPath)
+	var result map[string]any
+	json.Unmarshal(restored, &result)
+
+	// Original managed key values restored.
+	if result["model"] != "user-custom" {
+		t.Fatalf("expected model='user-custom', got=%v", result["model"])
+	}
+	resEnv, _ := result["env"].(map[string]any)
+	if resEnv["ANTHROPIC_BASE_URL"] != "https://custom.api.com" {
+		t.Fatalf("expected ANTHROPIC_BASE_URL restored to original, got=%v", resEnv["ANTHROPIC_BASE_URL"])
+	}
+	// User addition preserved.
+	if result["theme"] != "dark" {
+		t.Fatalf("expected theme='dark' preserved, got=%v", result["theme"])
+	}
+	// Gateway-added keys that weren't in original removed.
+	if _, ok := resEnv["ANTHROPIC_AUTH_TOKEN"]; ok {
+		t.Fatal("expected ANTHROPIC_AUTH_TOKEN removed")
+	}
+}
+
+func TestSmartRevertFallsBackOnCorruptFile(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"env\": {\n    \"FOO\": \"BAR\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := Apply(settingsPath, snapDir, 18888, "gpt-5.3-codex")
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// Corrupt settings.json with invalid JSON.
+	if err := os.WriteFile(settingsPath, []byte("{corrupt json!!!"), 0o600); err != nil {
+		t.Fatalf("write corrupt failed: %v", err)
+	}
+
+	// SmartRevert should fall back to full Revert.
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert fallback failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(settingsPath)
+	if state.HashBytes(restored) != state.HashBytes(original) {
+		t.Fatalf("expected full restore on corrupt file, got:\n%s", string(restored))
+	}
+}
+
+func TestSmartRevertRemovesEmptyEnv(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	// Original has no env key.
+	original := []byte("{\n  \"custom\": \"value\"\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := Apply(settingsPath, snapDir, 18888, "gpt-5.3-codex")
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(settingsPath)
+	var result map[string]any
+	if err := json.Unmarshal(restored, &result); err != nil {
+		t.Fatalf("parse restored failed: %v", err)
+	}
+	if _, ok := result["env"]; ok {
+		t.Fatal("expected env key removed when original had no env")
+	}
+	if result["custom"] != "value" {
+		t.Fatalf("expected custom='value' preserved, got=%v", result["custom"])
+	}
+}

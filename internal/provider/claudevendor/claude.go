@@ -34,3 +34,7 @@ func (claudePatcher) Apply(_ context.Context, rt provider.ScopeRuntime, _ string
 func (claudePatcher) Revert(_ context.Context, rt provider.ScopeRuntime, snapshotPath, snapshotSHA string) error {
 	return claudesettings.Revert(rt.Config.SettingsPath, snapshotPath, snapshotSHA)
 }
+
+func (claudePatcher) SmartRevert(_ context.Context, rt provider.ScopeRuntime, snapshotPath, snapshotSHA string) error {
+	return claudesettings.SmartRevert(rt.Config.SettingsPath, snapshotPath, snapshotSHA)
+}

@@ -1091,7 +1091,7 @@ func (a *application) cmdClaudeWithExpected(args []string, expected *expectedAct
 			if !allowSettingsMutation(active, ref, rt.State.Claude.AppliedGeneration) {
 				return cberr.New(cberr.ErrGenerationMismatch, "unsafe revert blocked: scope/generation does not match active pointer")
 			}
-			if err := rt.Bundle.Claude.Revert(context.Background(), toProviderRuntime(rt), rt.State.Claude.SnapshotPath, rt.State.Claude.SnapshotSHA256); err != nil {
+			if err := rt.Bundle.Claude.SmartRevert(context.Background(), toProviderRuntime(rt), rt.State.Claude.SnapshotPath, rt.State.Claude.SnapshotSHA256); err != nil {
 				return err
 			}
 			rt.State.Claude.Applied = false
@@ -2750,7 +2750,7 @@ func (a *application) cmdUninstall(args []string) error {
 				)
 				return nil
 			}
-			return rt.Bundle.Claude.Revert(context.Background(), toProviderRuntime(rt), rt.State.Claude.SnapshotPath, rt.State.Claude.SnapshotSHA256)
+			return rt.Bundle.Claude.SmartRevert(context.Background(), toProviderRuntime(rt), rt.State.Claude.SnapshotPath, rt.State.Claude.SnapshotSHA256)
 		}); err != nil {
 			if cberr.Code(err) != cberr.ErrUnknown {
 				return err

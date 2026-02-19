@@ -135,6 +135,95 @@ func ApplyWithOptions(opts ApplyOptions) (ApplyResult, error) {
 	return ApplyResult{SnapshotPath: snapshotPath, SnapshotSHA256: snapshotHash}, nil
 }
 
+// ManagedEnvKeys returns the complete set of env keys that ccgateway manages
+// inside Claude settings. This includes model routing keys and proxy connection keys.
+func ManagedEnvKeys() []string {
+	return []string{
+		"ANTHROPIC_BASE_URL",
+		"ANTHROPIC_AUTH_TOKEN",
+		"ANTHROPIC_MODEL",
+		"ANTHROPIC_SMALL_FAST_MODEL",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+	}
+}
+
+// SmartRevert restores only ccgateway-managed keys to their pre-Apply values
+// while preserving any user modifications to non-managed keys.
+// Falls back to full Revert if the current settings file cannot be read or parsed.
+func SmartRevert(settingsPath, snapshotPath, snapshotSHA string) error {
+	if snapshotPath == "" {
+		return cberr.New(cberr.ErrClaudeRevertFailed, "snapshot path is empty")
+	}
+	snapBytes, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		return cberr.Wrap(cberr.ErrClaudeRevertFailed, "failed to read snapshot", err)
+	}
+	snapHash := state.HashBytes(snapBytes)
+	if snapshotSHA != "" && snapHash != snapshotSHA {
+		return cberr.New(cberr.ErrClaudeRevertFailed, fmt.Sprintf("snapshot hash mismatch expected=%s actual=%s", snapshotSHA, snapHash))
+	}
+
+	// Read current settings; fall back to full Revert on any failure.
+	curBytes, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return Revert(settingsPath, snapshotPath, snapshotSHA)
+	}
+
+	var snapDoc map[string]any
+	if err := json.Unmarshal(snapBytes, &snapDoc); err != nil {
+		return Revert(settingsPath, snapshotPath, snapshotSHA)
+	}
+	var curDoc map[string]any
+	if err := json.Unmarshal(curBytes, &curDoc); err != nil {
+		return Revert(settingsPath, snapshotPath, snapshotSHA)
+	}
+
+	// Restore top-level "model" from snapshot.
+	if origVal, existed := snapDoc["model"]; existed {
+		curDoc["model"] = origVal
+	} else {
+		delete(curDoc, "model")
+	}
+
+	// Restore managed env keys from snapshot.
+	snapEnv, _ := snapDoc["env"].(map[string]any)
+	_, snapHadEnv := snapDoc["env"]
+	curEnv, curHasEnv := curDoc["env"].(map[string]any)
+	if !curHasEnv {
+		curEnv = map[string]any{}
+	}
+
+	for _, key := range ManagedEnvKeys() {
+		if snapEnv != nil {
+			if origVal, existed := snapEnv[key]; existed {
+				curEnv[key] = origVal
+				continue
+			}
+		}
+		delete(curEnv, key)
+	}
+
+	if len(curEnv) > 0 {
+		curDoc["env"] = curEnv
+	} else if snapHadEnv {
+		curDoc["env"] = curEnv
+	} else {
+		delete(curDoc, "env")
+	}
+
+	updated, err := json.MarshalIndent(curDoc, "", "  ")
+	if err != nil {
+		return cberr.Wrap(cberr.ErrClaudeRevertFailed, "failed to encode merged settings", err)
+	}
+	updated = append(updated, '\n')
+	if err := writeAtomic(settingsPath, updated, 0o600); err != nil {
+		return cberr.Wrap(cberr.ErrClaudeRevertFailed, "failed to write merged settings", err)
+	}
+	return nil
+}
+
 func Revert(settingsPath, snapshotPath, snapshotSHA string) error {
 	if snapshotPath == "" {
 		return cberr.New(cberr.ErrClaudeRevertFailed, "snapshot path is empty")

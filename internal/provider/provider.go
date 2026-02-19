@@ -30,6 +30,9 @@ type AuthStrategy interface {
 type ClaudePatcher interface {
 	Apply(ctx context.Context, rt ScopeRuntime, generation string) (claude.ApplyResult, error)
 	Revert(ctx context.Context, rt ScopeRuntime, snapshotPath, snapshotSHA string) error
+	// SmartRevert restores only managed keys to their pre-Apply values,
+	// preserving user modifications to non-managed keys.
+	SmartRevert(ctx context.Context, rt ScopeRuntime, snapshotPath, snapshotSHA string) error
 }
 
 type Bundle struct {

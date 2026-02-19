@@ -4113,6 +4113,10 @@ func (noopClaudePatcher) Revert(_ context.Context, _ provider.ScopeRuntime, _, _
 	return nil
 }
 
+func (noopClaudePatcher) SmartRevert(_ context.Context, _ provider.ScopeRuntime, _, _ string) error {
+	return nil
+}
+
 type countingClaudePatcher struct {
 	revertCalls *int32
 }
@@ -4122,6 +4126,13 @@ func (p *countingClaudePatcher) Apply(_ context.Context, _ provider.ScopeRuntime
 }
 
 func (p *countingClaudePatcher) Revert(_ context.Context, _ provider.ScopeRuntime, _, _ string) error {
+	if p != nil && p.revertCalls != nil {
+		atomic.AddInt32(p.revertCalls, 1)
+	}
+	return nil
+}
+
+func (p *countingClaudePatcher) SmartRevert(_ context.Context, _ provider.ScopeRuntime, _, _ string) error {
 	if p != nil && p.revertCalls != nil {
 		atomic.AddInt32(p.revertCalls, 1)
 	}

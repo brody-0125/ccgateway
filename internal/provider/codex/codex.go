@@ -50,3 +50,7 @@ func (claudePatcher) Apply(_ context.Context, rt provider.ScopeRuntime, generati
 func (claudePatcher) Revert(_ context.Context, rt provider.ScopeRuntime, snapshotPath, snapshotSHA string) error {
 	return claude.Revert(rt.Config.SettingsPath, snapshotPath, snapshotSHA)
 }
+
+func (claudePatcher) SmartRevert(_ context.Context, rt provider.ScopeRuntime, snapshotPath, snapshotSHA string) error {
+	return claude.SmartRevert(rt.Config.SettingsPath, snapshotPath, snapshotSHA)
+}
