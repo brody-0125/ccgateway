@@ -1078,14 +1078,19 @@ func (a *application) cmdClaudeWithExpected(args []string, expected *expectedAct
 		}
 		rt.Logger.Infof("claude apply complete scope=%s generation=%s", ref.ScopeID(), generation)
 		fmt.Printf("claude settings applied (%s)\n", ref.ScopeID())
-		// Best-effort snapshot GC after successful apply.
-		gcProtected := map[string]bool{}
-		if rt.State.Claude.SnapshotPath != "" {
-			gcProtected[rt.State.Claude.SnapshotPath] = true
-		}
-		gcRes := claude.CollectSnapshots(rt.Paths.SnapshotsDir, 5, gcProtected)
-		if len(gcRes.Removed) > 0 {
-			rt.Logger.Infof("snapshot gc: removed %d old snapshots", len(gcRes.Removed))
+		// Best-effort snapshot GC after successful apply, but only for
+		// direct user invocations. When called from within a transaction
+		// (model switch, failover, scope switch) the caller holds a
+		// rollback snapshot that GC must not delete.
+		if expected == nil {
+			gcProtected := map[string]bool{}
+			if rt.State.Claude.SnapshotPath != "" {
+				gcProtected[rt.State.Claude.SnapshotPath] = true
+			}
+			gcRes := claude.CollectSnapshots(rt.Paths.SnapshotsDir, 5, gcProtected)
+			if len(gcRes.Removed) > 0 {
+				rt.Logger.Infof("snapshot gc: removed %d old snapshots", len(gcRes.Removed))
+			}
 		}
 		return nil
 	case "revert":
