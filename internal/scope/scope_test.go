@@ -47,25 +47,25 @@ func TestBuildPathsPlatformServicePaths(t *testing.T) {
 	switch runtime.GOOS {
 	case "linux":
 		wantDir := filepath.Join(home, ".config", "systemd", "user")
-		if paths.LaunchAgentDir != wantDir {
-			t.Fatalf("expected LaunchAgentDir=%s, got=%s", wantDir, paths.LaunchAgentDir)
+		if paths.ServiceUnitDir != wantDir {
+			t.Fatalf("expected ServiceUnitDir=%s, got=%s", wantDir, paths.ServiceUnitDir)
 		}
-		if !strings.HasSuffix(paths.ProxyPlistPath, ".service") {
-			t.Fatalf("expected .service extension on Linux, got=%s", paths.ProxyPlistPath)
+		if !strings.HasSuffix(paths.ProxyUnitPath, ".service") {
+			t.Fatalf("expected .service extension on Linux, got=%s", paths.ProxyUnitPath)
 		}
-		if !strings.HasSuffix(paths.SyncPlistPath, ".service") {
-			t.Fatalf("expected .service extension on Linux, got=%s", paths.SyncPlistPath)
+		if !strings.HasSuffix(paths.SyncUnitPath, ".service") {
+			t.Fatalf("expected .service extension on Linux, got=%s", paths.SyncUnitPath)
 		}
 	case "darwin":
 		wantDir := filepath.Join(home, "Library", "LaunchAgents")
-		if paths.LaunchAgentDir != wantDir {
-			t.Fatalf("expected LaunchAgentDir=%s, got=%s", wantDir, paths.LaunchAgentDir)
+		if paths.ServiceUnitDir != wantDir {
+			t.Fatalf("expected ServiceUnitDir=%s, got=%s", wantDir, paths.ServiceUnitDir)
 		}
-		if !strings.HasSuffix(paths.ProxyPlistPath, ".plist") {
-			t.Fatalf("expected .plist extension on macOS, got=%s", paths.ProxyPlistPath)
+		if !strings.HasSuffix(paths.ProxyUnitPath, ".plist") {
+			t.Fatalf("expected .plist extension on macOS, got=%s", paths.ProxyUnitPath)
 		}
-		if !strings.HasSuffix(paths.SyncPlistPath, ".plist") {
-			t.Fatalf("expected .plist extension on macOS, got=%s", paths.SyncPlistPath)
+		if !strings.HasSuffix(paths.SyncUnitPath, ".plist") {
+			t.Fatalf("expected .plist extension on macOS, got=%s", paths.SyncUnitPath)
 		}
 	default:
 		t.Skipf("unsupported platform: %s", runtime.GOOS)

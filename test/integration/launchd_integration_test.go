@@ -23,17 +23,17 @@ func TestLaunchdManagerWithStub(t *testing.T) {
 
 	mgr := launchd.NewManager()
 	files := launchd.AgentFiles{
-		ProxyPlistPath: filepath.Join(dir, "proxy.plist"),
-		SyncPlistPath:  filepath.Join(dir, "sync.plist"),
-		ProxyBinary:    "/tmp/cli-proxy-api",
-		ProxyConfig:    filepath.Join(dir, "proxy.yaml"),
-		ProxyLog:       filepath.Join(dir, "proxy.log"),
-		SyncLog:        filepath.Join(dir, "sync.log"),
-		SyncScript:     filepath.Join(dir, "sync.sh"),
-		AuthSource:     filepath.Join(dir, "auth.json"),
-		HomeDir:        dir,
-		ProxyLabel:     "com.test.proxy",
-		SyncLabel:      "com.test.sync",
+		ProxyUnitPath: filepath.Join(dir, "proxy.plist"),
+		SyncUnitPath:  filepath.Join(dir, "sync.plist"),
+		ProxyBinary:   "/tmp/cli-proxy-api",
+		ProxyConfig:   filepath.Join(dir, "proxy.yaml"),
+		ProxyLog:      filepath.Join(dir, "proxy.log"),
+		SyncLog:       filepath.Join(dir, "sync.log"),
+		SyncScript:    filepath.Join(dir, "sync.sh"),
+		AuthSource:    filepath.Join(dir, "auth.json"),
+		HomeDir:       dir,
+		ProxyLabel:    "com.test.proxy",
+		SyncLabel:     "com.test.sync",
 	}
 	if err := os.WriteFile(files.AuthSource, []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write auth source: %v", err)
@@ -61,7 +61,7 @@ func TestLaunchdManagerWithStub(t *testing.T) {
 	if err := mgr.Stop(files.ProxyLabel, files.SyncLabel); err != nil {
 		t.Fatalf("stop failed: %v", err)
 	}
-	if err := mgr.RemoveAgents(files.ProxyLabel, files.SyncLabel, files.ProxyPlistPath, files.SyncPlistPath); err != nil {
+	if err := mgr.RemoveAgents(files.ProxyLabel, files.SyncLabel, files.ProxyUnitPath, files.SyncUnitPath); err != nil {
 		t.Fatalf("remove failed: %v", err)
 	}
 
