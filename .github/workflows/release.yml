@@ -18,7 +18,7 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     env:
-      BINARY_NAME: ccb
+      BINARY_NAME: ccg
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
             mkdir -p "${STAGING_DIR}"
 
             GOOS=darwin GOARCH="${ARCH}" CGO_ENABLED=0 \
-              go build -trimpath -ldflags="-s -w" -o "${STAGING_DIR}/${BINARY_NAME}" ./cmd/ccb
+              go build -trimpath -ldflags="-s -w" -o "${STAGING_DIR}/${BINARY_NAME}" ./cmd/ccg
 
             chmod +x "${STAGING_DIR}/${BINARY_NAME}"
             tar -czf "${ARCHIVE_PATH}" -C "${STAGING_DIR}" "${BINARY_NAME}"

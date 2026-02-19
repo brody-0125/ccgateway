@@ -55,7 +55,7 @@ type runtime struct {
 func Run(args []string) int {
 	app, err := newApplication()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[ccb] init failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ccg] init failed: %v\n", err)
 		return 1
 	}
 	if err := app.run(args); err != nil {
@@ -64,7 +64,7 @@ func Run(args []string) int {
 		if code == "" {
 			code = cberr.ErrUnknown
 		}
-		fmt.Fprintf(os.Stderr, "[ccb] %s: %v\n", code, err)
+		fmt.Fprintf(os.Stderr, "[ccg] %s: %v\n", code, err)
 		return 1
 	}
 	return 0
@@ -75,7 +75,7 @@ func newApplication() (*application, error) {
 	if err != nil {
 		return nil, err
 	}
-	cwd := strings.TrimSpace(os.Getenv("CCB_CWD"))
+	cwd := strings.TrimSpace(os.Getenv("CCG_CWD"))
 	if cwd == "" {
 		cwd, err = os.Getwd()
 		if err != nil {
@@ -112,7 +112,7 @@ func (a *application) run(args []string) error {
 		return a.cmdClaude(args[1:])
 	case "doctor":
 		return a.cmdDoctor(args[1:])
-	case "status", "ccb-status":
+	case "status", "ccg-status":
 		return a.cmdStatus(args[1:])
 	case "model":
 		return a.cmdModel(args[1:])
@@ -767,7 +767,7 @@ func (a *application) cmdService(args []string) error {
 
 	readOnly := sub == "status"
 	if !readOnly && *active {
-		return cberr.New(cberr.ErrInvalidArgs, "--active can only be used with 'ccb service status'")
+		return cberr.New(cberr.ErrInvalidArgs, "--active can only be used with 'ccgservice status'")
 	}
 	ref, err := a.resolveScope(*vendorID, *profileID, *active, readOnly)
 	if err != nil {
@@ -800,7 +800,7 @@ func (a *application) cmdService(args []string) error {
 			return err
 		}
 		if _, statErr := os.Stat(rt.Paths.ProxyBinary); statErr != nil {
-			return cberr.New(cberr.ErrInvalidConfig, "proxy binary missing; run 'ccb proxy install --vendor ... --profile ...'")
+			return cberr.New(cberr.ErrInvalidConfig, "proxy binary missing; run 'ccg proxy install --vendor ... --profile ...'")
 		}
 		execPath, err := os.Executable()
 		if err != nil {
@@ -1472,7 +1472,7 @@ func (a *application) cmdModel(args []string) error {
 		}
 		return cberr.New(
 			cberr.ErrSwitchValidation,
-			fmt.Sprintf("model switch is active-scope only (active=%s target=%s); run: ccb use --vendor %s --profile %s", activeScope, ref.ScopeID(), ref.VendorID, ref.ProfileID),
+			fmt.Sprintf("model switch is active-scope only (active=%s target=%s); run: ccg use --vendor %s --profile %s", activeScope, ref.ScopeID(), ref.VendorID, ref.ProfileID),
 		)
 	}
 	if err := ensureActiveSwitchContract(prevActive, rt.State, ref, "model switch"); err != nil {
@@ -1482,7 +1482,7 @@ func (a *application) cmdModel(args []string) error {
 		return cberr.New(
 			cberr.ErrInvalidConfig,
 			fmt.Sprintf(
-				"proxy binary missing (%s); run: ccb setup --vendor %s --profile %s --gateway-backend %s --model %s (or: ccb proxy install --vendor %s --profile %s)",
+				"proxy binary missing (%s); run: ccg setup --vendor %s --profile %s --gateway-backend %s --model %s (or: ccg proxy install --vendor %s --profile %s)",
 				rt.Paths.ProxyBinary,
 				ref.VendorID,
 				ref.ProfileID,
@@ -1895,7 +1895,7 @@ func (a *application) evaluateFailoverPreflight(fromRef, toRef scope.Ref, modelI
 			false,
 			true,
 			fmt.Sprintf(
-				"active scope mismatch (active=%s source=%s); run: ccb use --vendor %s --profile %s",
+				"active scope mismatch (active=%s source=%s); run: ccg use --vendor %s --profile %s",
 				activeScope,
 				fromRef.ScopeID(),
 				fromRef.VendorID,
@@ -2014,9 +2014,9 @@ func (a *application) evaluateFailoverPreflight(fromRef, toRef scope.Ref, modelI
 	if modelArg == "" {
 		modelArg = "<model>"
 	}
-	report.PreflightCmd = fmt.Sprintf("ccb preflight --from %s --to %s --model %s", fromRef.ScopeID(), toRef.ScopeID(), modelArg)
-	report.FailoverCmd = fmt.Sprintf("ccb failover --from %s --to %s --model %s", fromRef.ScopeID(), toRef.ScopeID(), modelArg)
-	report.DoctorCmd = fmt.Sprintf("ccb doctor --vendor %s --profile %s", toRef.VendorID, toRef.ProfileID)
+	report.PreflightCmd = fmt.Sprintf("ccg preflight --from %s --to %s --model %s", fromRef.ScopeID(), toRef.ScopeID(), modelArg)
+	report.FailoverCmd = fmt.Sprintf("ccg failover --from %s --to %s --model %s", fromRef.ScopeID(), toRef.ScopeID(), modelArg)
+	report.DoctorCmd = fmt.Sprintf("ccg doctor --vendor %s --profile %s", toRef.VendorID, toRef.ProfileID)
 	return report, nil
 }
 
@@ -2305,7 +2305,7 @@ func (a *application) cmdScopeSwitch(args []string) error {
 		return cberr.Wrap(cberr.ErrInvalidArgs, "invalid --to scope id", err)
 	}
 	if fromRef.ScopeID() == toRef.ScopeID() {
-		return cberr.New(cberr.ErrInvalidArgs, fmt.Sprintf("scope switch requires different --from and --to scopes; for same-scope model change use: ccb model switch --vendor %s --profile %s --model <name>", fromRef.VendorID, fromRef.ProfileID))
+		return cberr.New(cberr.ErrInvalidArgs, fmt.Sprintf("scope switch requires different --from and --to scopes; for same-scope model change use: ccg model switch --vendor %s --profile %s --model <name>", fromRef.VendorID, fromRef.ProfileID))
 	}
 	normalizedModel, err := modelnorm.NormalizeForVendor(toRef.VendorID, *modelName)
 	if err != nil {
@@ -2605,7 +2605,7 @@ func (a *application) cmdUseWithExpected(args []string, expected *expectedActive
 		return err
 	}
 	if rt.Config.RuntimeMode == config.RuntimeModeNativeCleanup {
-		return cberr.New(cberr.ErrCapabilityMissing, "runtime_mode=native-cleanup is cleanup-only and cannot be activated via 'ccb use'")
+		return cberr.New(cberr.ErrCapabilityMissing, "runtime_mode=native-cleanup is cleanup-only and cannot be activated via 'ccg use'")
 	}
 	if err := a.ensureProviderCapability(rt, provider.CapabilityClaude); err != nil {
 		return err
@@ -3091,14 +3091,14 @@ func usage() string {
   %s
   %s
   %s
-  ccb service install --vendor <v> --profile <p>
-  ccb service start --vendor <v> --profile <p>
-  ccb service stop --vendor <v> --profile <p>
-  ccb service status [--vendor <v> --profile <p> | --active]
+  ccg service install --vendor <v> --profile <p>
+  ccg service start --vendor <v> --profile <p>
+  ccg service stop --vendor <v> --profile <p>
+  ccg service status [--vendor <v> --profile <p> | --active]
   %s
-  ccb gateway serve --config <path>
-  ccb claude apply --vendor <v> --profile <p>
-  ccb claude revert --vendor <v> --profile <p>
+  ccg gateway serve --config <path>
+  ccg claude apply --vendor <v> --profile <p>
+  ccg claude revert --vendor <v> --profile <p>
   %s
   %s
   %s
@@ -3124,71 +3124,71 @@ func usage() string {
 }
 
 func bootstrapUsage() string {
-	return "ccb bootstrap --vendor <v> --profile <p> [--runtime-mode gateway|native-cleanup|native-direct] [--gateway-backend <id>] [--settings-layer user|project|local] [--settings-path <path>] [--model <name>] [--port <n>] [--auth-source <path>] [--auth-target <path>] [--proxy-enabled true|false]"
+	return "ccg bootstrap --vendor <v> --profile <p> [--runtime-mode gateway|native-cleanup|native-direct] [--gateway-backend <id>] [--settings-layer user|project|local] [--settings-path <path>] [--model <name>] [--port <n>] [--auth-source <path>] [--auth-target <path>] [--proxy-enabled true|false]"
 }
 
 func setupUsage() string {
-	return "ccb setup [--interactive] --vendor <v> --profile <p> [--runtime-mode gateway|native-cleanup|native-direct] [--gateway-backend <id>] [--settings-layer user|project|local] [--settings-path <path>] [--model <name>] [--proxy-version <tag|latest>] [--skip-claude-apply] [--skip-doctor]"
+	return "ccg setup [--interactive] --vendor <v> --profile <p> [--runtime-mode gateway|native-cleanup|native-direct] [--gateway-backend <id>] [--settings-layer user|project|local] [--settings-path <path>] [--model <name>] [--proxy-version <tag|latest>] [--skip-claude-apply] [--skip-doctor]"
 }
 
 func proxyInstallUsage() string {
-	return "ccb proxy install --vendor <v> --profile <p> [--version <tag|latest>]"
+	return "ccg proxy install --vendor <v> --profile <p> [--version <tag|latest>]"
 }
 
 func authSyncUsage() string {
-	return "ccb auth sync --vendor <v> --profile <p>"
+	return "ccg auth sync --vendor <v> --profile <p>"
 }
 
 func serviceUsage() string {
-	return strings.TrimSpace(`ccb service install --vendor <v> --profile <p>
-ccb service start --vendor <v> --profile <p>
-ccb service reconcile --vendor <v> --profile <p>
-ccb service stop --vendor <v> --profile <p>
-ccb service status [--vendor <v> --profile <p> | --active]`)
+	return strings.TrimSpace(`ccg service install --vendor <v> --profile <p>
+ccg service start --vendor <v> --profile <p>
+ccg service reconcile --vendor <v> --profile <p>
+ccg service stop --vendor <v> --profile <p>
+ccg service status [--vendor <v> --profile <p> | --active]`)
 }
 
 func gatewayUsage() string {
-	return "ccb gateway serve --config <path>"
+	return "ccg gateway serve --config <path>"
 }
 
 func claudeUsage() string {
-	return "ccb claude <apply|revert> --vendor <v> --profile <p>"
+	return "ccg claude <apply|revert> --vendor <v> --profile <p>"
 }
 
 func doctorUsage() string {
-	return "ccb doctor [--vendor <v> --profile <p> | --active] [--clear-error-history] [--verbose]"
+	return "ccg doctor [--vendor <v> --profile <p> | --active] [--clear-error-history] [--verbose]"
 }
 
 func statusUsage() string {
-	return "ccb status [--vendor <v> --profile <p> | --active] [--since <duration>] [--json] (alias: ccb ccb-status ...)"
+	return "ccg status [--vendor <v> --profile <p> | --active] [--since <duration>] [--json] (alias: ccg ccg-status ...)"
 }
 
 func modelUsage() string {
-	return "ccb model switch --vendor <v> --profile <p> --model <name>"
+	return "ccg model switch --vendor <v> --profile <p> --model <name>"
 }
 
 func preflightUsage() string {
-	return "ccb preflight --from <vendor:profile> --to <vendor:profile> [--model <name>] [--json]"
+	return "ccg preflight --from <vendor:profile> --to <vendor:profile> [--model <name>] [--json]"
 }
 
 func handoffUsage() string {
-	return "ccb handoff create --from <vendor:profile> --to <vendor:profile> [--model <name>] [--output <path>] [--json]"
+	return "ccg handoff create --from <vendor:profile> --to <vendor:profile> [--model <name>] [--output <path>] [--json]"
 }
 
 func scopeUsage() string {
-	return "ccb scope switch --from <vendor:profile> --to <vendor:profile> --model <name> [--dry-run]"
+	return "ccg scope switch --from <vendor:profile> --to <vendor:profile> --model <name> [--dry-run]"
 }
 
 func failoverUsage() string {
-	return "ccb failover --from <vendor:profile> --to <vendor:profile> --model <name>"
+	return "ccg failover --from <vendor:profile> --to <vendor:profile> --model <name>"
 }
 
 func useUsage() string {
-	return "ccb use --vendor <v> --profile <p>"
+	return "ccg use --vendor <v> --profile <p>"
 }
 
 func uninstallUsage() string {
-	return "ccb uninstall --vendor <v> --profile <p> [--purge]"
+	return "ccg uninstall --vendor <v> --profile <p> [--purge]"
 }
 
 func parseFlagError(err error, usageText, parseMessage string) error {
@@ -3322,19 +3322,19 @@ func ensureActiveSwitchContract(active control.ActivePointer, st state.State, re
 	if st.Claude.Applied && stateGen == "" {
 		return cberr.New(
 			cberr.ErrSwitchValidation,
-			fmt.Sprintf("%s blocked: scope has applied claude settings but empty state generation; run: ccb claude apply --vendor %s --profile %s", command, ref.VendorID, ref.ProfileID),
+			fmt.Sprintf("%s blocked: scope has applied claude settings but empty state generation; run: ccg claude apply --vendor %s --profile %s", command, ref.VendorID, ref.ProfileID),
 		)
 	}
 	if st.Claude.Applied && activeGen == "" {
 		return cberr.New(
 			cberr.ErrSwitchValidation,
-			fmt.Sprintf("%s blocked: active generation is empty while scope is applied; run: ccb claude apply --vendor %s --profile %s", command, ref.VendorID, ref.ProfileID),
+			fmt.Sprintf("%s blocked: active generation is empty while scope is applied; run: ccg claude apply --vendor %s --profile %s", command, ref.VendorID, ref.ProfileID),
 		)
 	}
 	if stateGen != "" && activeGen != "" && stateGen != activeGen {
 		return cberr.New(
 			cberr.ErrSwitchValidation,
-			fmt.Sprintf("%s blocked: active/state generation mismatch (active=%s state=%s); run: ccb claude apply --vendor %s --profile %s", command, activeGen, stateGen, ref.VendorID, ref.ProfileID),
+			fmt.Sprintf("%s blocked: active/state generation mismatch (active=%s state=%s); run: ccg claude apply --vendor %s --profile %s", command, activeGen, stateGen, ref.VendorID, ref.ProfileID),
 		)
 	}
 	return nil
@@ -3516,8 +3516,8 @@ func normalizeRequestPath(raw string) string {
 	return raw
 }
 
-const suppressBootstrapOutputEnv = "CCB_SUPPRESS_BOOTSTRAP_OUTPUT"
-const disableStartRecoveryEnv = "CCB_DISABLE_START_RECOVERY"
+const suppressBootstrapOutputEnv = "CCG_SUPPRESS_BOOTSTRAP_OUTPUT"
+const disableStartRecoveryEnv = "CCG_DISABLE_START_RECOVERY"
 
 func suppressBootstrapOutput() bool {
 	v := strings.TrimSpace(os.Getenv(suppressBootstrapOutputEnv))
@@ -3737,7 +3737,7 @@ func ensureScopedSettingsBinding(rt runtime, command string) error {
 		if configured == "" || configured != expected {
 			return cberr.New(
 				cberr.ErrConfigOverridden,
-				fmt.Sprintf("%s blocked: settings_layer=project mismatch (configured=%s expected=%s for cwd=%s); run: ccb setup --vendor %s --profile %s --settings-layer project", command, rt.Config.SettingsPath, expected, rt.Paths.Cwd, rt.Ref.VendorID, rt.Ref.ProfileID),
+				fmt.Sprintf("%s blocked: settings_layer=project mismatch (configured=%s expected=%s for cwd=%s); run: ccg setup --vendor %s --profile %s --settings-layer project", command, rt.Config.SettingsPath, expected, rt.Paths.Cwd, rt.Ref.VendorID, rt.Ref.ProfileID),
 			)
 		}
 	case config.SettingsLayerLocal:
@@ -3746,7 +3746,7 @@ func ensureScopedSettingsBinding(rt runtime, command string) error {
 		if configured == "" || configured != expected {
 			return cberr.New(
 				cberr.ErrConfigOverridden,
-				fmt.Sprintf("%s blocked: settings_layer=local mismatch (configured=%s expected=%s for cwd=%s); run: ccb setup --vendor %s --profile %s --settings-layer local", command, rt.Config.SettingsPath, expected, rt.Paths.Cwd, rt.Ref.VendorID, rt.Ref.ProfileID),
+				fmt.Sprintf("%s blocked: settings_layer=local mismatch (configured=%s expected=%s for cwd=%s); run: ccg setup --vendor %s --profile %s --settings-layer local", command, rt.Config.SettingsPath, expected, rt.Paths.Cwd, rt.Ref.VendorID, rt.Ref.ProfileID),
 			)
 		}
 	}
@@ -3790,7 +3790,7 @@ func (a *application) runServiceReconcile(ref scope.Ref, suppressOutput bool) er
 }
 
 func homeDir() (string, error) {
-	if v := strings.TrimSpace(os.Getenv("CCB_HOME")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("CCG_HOME")); v != "" {
 		return v, nil
 	}
 	return os.UserHomeDir()

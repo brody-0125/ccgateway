@@ -7,34 +7,34 @@ Go-based CLI (macOS / Linux) for scoped vendor/profile routing with explicit Cla
 ### Discover commands quickly
 
 ```bash
-ccb help
-ccb status --vendor codex --profile default
-ccb service status --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg help
+ccg status --vendor codex --profile default
+ccg service status --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 ### Visibility checks that matter
 
-- `ccb status ...` shows runtime mode/backend/model/port, route proof, tool-call integrity, and local traffic summary.
-- `ccb doctor ...` is the authoritative health gate; `[OK]` means current checks pass.
+- `ccg status ...` shows runtime mode/backend/model/port, route proof, tool-call integrity, and local traffic summary.
+- `ccg doctor ...` is the authoritative health gate; `[OK]` means current checks pass.
 - `Past errors` in `doctor` is history-only. Clear old noise with:
 
 ```bash
-ccb doctor --vendor codex --profile default --clear-error-history
+ccg doctor --vendor codex --profile default --clear-error-history
 ```
 
 ## How it works
 
 ```mermaid
 flowchart TD
-  A["User runs ccb setup"] --> B["bootstrap (scope config/state)"]
+  A["User runs ccg setup"] --> B["bootstrap (scope config/state)"]
   B --> C["proxy install + checksum verify"]
   C --> D["auth sync"]
   D --> E["service install/start (launchd / systemd)"]
   E --> F["claude apply (settings snapshot + apply)"]
   F --> G["doctor (route proof + health checks)"]
 
-  H["User runs ccb model switch"] --> I["normalize model alias"]
+  H["User runs ccg model switch"] --> I["normalize model alias"]
   I --> J["update config model"]
   J --> K["service reinstall/start"]
   K --> L["claude apply"]
@@ -58,14 +58,14 @@ flowchart TD
 - `loginctl enable-linger <user>` — enables user services to run without an active login session
 - `XDG_RUNTIME_DIR` set (typically `/run/user/$(id -u)`; auto-set on most systemd distros)
 
-### 2) Install `ccb`
+### 2) Install `ccg`
 
 Recommended (agent-safe, deterministic):
 
 ```bash
-./scripts/install_ccb.sh --source --install-dir "$HOME/.local/bin"
+./scripts/install_ccg.sh --source --install-dir "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
-scripts/verify_ccb.sh --binary "$HOME/.local/bin/ccb"
+scripts/verify_ccg.sh --binary "$HOME/.local/bin/ccg"
 ```
 
 `--source` mode builds from this repository root by default, so it still works when invoked via absolute script path from another working directory.
@@ -73,35 +73,35 @@ scripts/verify_ccb.sh --binary "$HOME/.local/bin/ccb"
 Or install from GitHub Release:
 
 ```bash
-./scripts/install_ccb.sh --repo <owner>/<repo> --version latest --install-dir "$HOME/.local/bin"
+./scripts/install_ccg.sh --repo <owner>/<repo> --version latest --install-dir "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
-scripts/verify_ccb.sh --binary "$HOME/.local/bin/ccb"
+scripts/verify_ccg.sh --binary "$HOME/.local/bin/ccg"
 ```
 
 If you need `/usr/local/bin`:
 
 ```bash
-sudo ./scripts/install_ccb.sh --repo <owner>/<repo> --version latest --install-dir /usr/local/bin
-scripts/verify_ccb.sh --binary /usr/local/bin/ccb
+sudo ./scripts/install_ccg.sh --repo <owner>/<repo> --version latest --install-dir /usr/local/bin
+scripts/verify_ccg.sh --binary /usr/local/bin/ccg
 ```
 
 ### 3) One-shot setup (recommended)
 
 ```bash
-ccb setup --vendor codex --profile default
-ccb setup --vendor codex --profile default --gateway-backend cliproxyapi
-ccb setup --vendor codex --profile default --gateway-backend cliproxyapi --settings-layer project
-ccb setup --vendor codex --profile default --gateway-backend cliproxyapi --model gpt-5.3-codex-spark
-ccb setup --interactive
+ccg setup --vendor codex --profile default
+ccg setup --vendor codex --profile default --gateway-backend cliproxyapi
+ccg setup --vendor codex --profile default --gateway-backend cliproxyapi --settings-layer project
+ccg setup --vendor codex --profile default --gateway-backend cliproxyapi --model gpt-5.3-codex-spark
+ccg setup --interactive
 # experimental (health-oriented) backend; not for full LLM routing
-ccb setup --vendor codex --profile default --gateway-backend builtin
+ccg setup --vendor codex --profile default --gateway-backend builtin
 ```
 
 This runs `bootstrap -> proxy install -> auth sync -> service install/start -> claude apply -> doctor`.
 If you only need native cleanup transition:
 
 ```bash
-ccb setup --vendor codex --profile default --runtime-mode native-cleanup
+ccg setup --vendor codex --profile default --runtime-mode native-cleanup
 ```
 
 Native cleanup setup also removes existing scope launch agents (`proxy`/`sync`) before applying cleanup settings.
@@ -110,32 +110,32 @@ For Codex, model aliases are normalized (`codex` -> `gpt-5.3-codex`, `codex-spar
 Direct Claude scope setup (no local proxy route):
 
 ```bash
-ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-sonnet-4-6
+ccg setup --vendor claude --profile default --runtime-mode native-direct --model claude-sonnet-4-6
 # or for max intelligence
-ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-opus-4-6
+ccg setup --vendor claude --profile default --runtime-mode native-direct --model claude-opus-4-6
 ```
 
-If you upgraded `ccb` binary, run `ccb service install --vendor codex --profile default` once to regenerate service config (launchd plist on macOS, systemd unit on Linux) before `service start`.
+If you upgraded `ccg` binary, run `ccg service install --vendor codex --profile default` once to regenerate service config (launchd plist on macOS, systemd unit on Linux) before `service start`.
 
 ### 4) Bootstrap a scope (manual path)
 
 ```bash
-ccb bootstrap --vendor codex --profile default
+ccg bootstrap --vendor codex --profile default
 ```
 
-Default behavior: `ccb` isolates Claude routing per project by writing to `<cwd>/.claude/settings.json` (`settings_layer=project`), so other local projects/sessions keep their original Claude path.
+Default behavior: `ccg` isolates Claude routing per project by writing to `<cwd>/.claude/settings.json` (`settings_layer=project`), so other local projects/sessions keep their original Claude path.
 
 If an existing scope was created with old user-layer defaults, migrate once:
 
 ```bash
-ccb bootstrap --vendor codex --profile default --settings-layer project
-ccb claude apply --vendor codex --profile default
+ccg bootstrap --vendor codex --profile default --settings-layer project
+ccg claude apply --vendor codex --profile default
 ```
 
 If the same `vendor/profile` is reused from a different project cwd, `setup`/`claude apply`/`use` can now fail with `settings_layer=project mismatch` to prevent cross-project settings writes. Rebind explicitly:
 
 ```bash
-ccb setup --vendor codex --profile <profile> --settings-layer project
+ccg setup --vendor codex --profile <profile> --settings-layer project
 ```
 
 ### 5) Install runtime dependencies for the scope
@@ -143,11 +143,11 @@ ccb setup --vendor codex --profile <profile> --settings-layer project
 `gateway` mode (uses local proxy / CLIProxyAPI):
 
 ```bash
-ccb proxy install --vendor codex --profile default --version latest
-ccb auth sync --vendor codex --profile default
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb service reconcile --vendor codex --profile default
+ccg proxy install --vendor codex --profile default --version latest
+ccg auth sync --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg service reconcile --vendor codex --profile default
 ```
 
 `--version` accepts both `vX.Y.Z` and `X.Y.Z` (`latest` also supported).
@@ -155,15 +155,15 @@ ccb service reconcile --vendor codex --profile default
 `native-cleanup` mode (cleanup-only transition path from gateway):
 
 ```bash
-ccb bootstrap --vendor codex --profile default --runtime-mode native-cleanup
-ccb claude apply --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg bootstrap --vendor codex --profile default --runtime-mode native-cleanup
+ccg claude apply --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 ### 6) Apply Claude settings explicitly
 
 ```bash
-ccb claude apply --vendor codex --profile default
+ccg claude apply --vendor codex --profile default
 ```
 
 No automatic settings mutation occurs before this command.
@@ -172,27 +172,27 @@ In `native-cleanup` mode, `claude apply` removes ccgateway-managed proxy/model o
 ### 7) Validate health and status
 
 ```bash
-ccb service status --vendor codex --profile default
-ccb doctor --vendor codex --profile default
-ccb status --vendor codex --profile default --json
+ccg service status --vendor codex --profile default
+ccg doctor --vendor codex --profile default
+ccg status --vendor codex --profile default --json
 ```
 
 ### 8) Switch active scope (optional)
 
 ```bash
-ccb use --vendor codex --profile default
-ccb service status --active
-ccb doctor --active
+ccg use --vendor codex --profile default
+ccg service status --active
+ccg doctor --active
 ```
 
 ### 9) Switch model after install (active scope only)
 
 ```bash
-ccb model switch --vendor codex --profile default --model codex-spark
+ccg model switch --vendor codex --profile default --model codex-spark
 # equivalent canonical form
-ccb model switch --vendor codex --profile default --model gpt-5.3-codex-spark
-ccb status --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg model switch --vendor codex --profile default --model gpt-5.3-codex-spark
+ccg status --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 `model switch` runs one-shot transition: `config update -> service install/start -> claude apply -> doctor`.
@@ -205,8 +205,8 @@ Codex quota/token exhaustion fallback (current supported path):
 
 ```bash
 # disable gateway routing and clean ccgateway-managed Claude overrides
-ccb setup --vendor codex --profile default --runtime-mode native-cleanup
-ccb doctor --vendor codex --profile default
+ccg setup --vendor codex --profile default --runtime-mode native-cleanup
+ccg doctor --vendor codex --profile default
 ```
 
 After native cleanup, select/use Claude-native model (for example `claude-sonnet-4-6` or `claude-opus-4-6`) directly in Claude Code path.
@@ -214,8 +214,8 @@ After native cleanup, select/use Claude-native model (for example `claude-sonnet
 ### 10) Cross-vendor failover (one-shot)
 
 ```bash
-ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
-ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6
+ccg preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccg failover --from codex:default --to claude:default --model claude-sonnet-4-6
 # or --model claude-opus-4-6 for max intelligence
 ```
 
@@ -231,14 +231,14 @@ For existing target scopes, settings binding/policy validation now runs before m
 - warnings (advisory signals like route/tool integrity)
 
 ```bash
-ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
-ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
+ccg preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccg preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
 ```
 
 For multi-agent/operator handoff, generate a ready-to-run bundle:
 
 ```bash
-ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md
+ccg handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccg-handoff.md
 ```
 
 `handoff create` does not mutate scopes/services. It packages preflight checks and next commands (`preflight -> failover -> doctor`) into markdown or JSON.
@@ -246,10 +246,10 @@ ccb handoff create --from codex:default --to claude:default --model claude-sonne
 ### 12) Revert and uninstall (optional)
 
 ```bash
-ccb claude revert --vendor codex --profile default
-ccb uninstall --vendor codex --profile default
+ccg claude revert --vendor codex --profile default
+ccg uninstall --vendor codex --profile default
 # full cleanup
-ccb uninstall --vendor codex --profile default --purge
+ccg uninstall --vendor codex --profile default --purge
 ```
 
 ## Command reference
@@ -257,44 +257,44 @@ ccb uninstall --vendor codex --profile default --purge
 All mutating commands require explicit scope:
 
 ```bash
-ccb bootstrap --vendor codex --profile default
-ccb setup --vendor codex --profile default
-ccb setup --vendor codex --profile default --settings-layer project
-ccb proxy install --vendor codex --profile default --version latest
-ccb auth sync --vendor codex --profile default
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb service reconcile --vendor codex --profile default
-ccb service stop --vendor codex --profile default
-ccb claude apply --vendor codex --profile default
-ccb claude revert --vendor codex --profile default
-ccb model switch --vendor codex --profile default --model codex-spark
-ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6
-ccb use --vendor codex --profile default
-ccb uninstall --vendor codex --profile default
-ccb uninstall --vendor codex --profile default --purge
+ccg bootstrap --vendor codex --profile default
+ccg setup --vendor codex --profile default
+ccg setup --vendor codex --profile default --settings-layer project
+ccg proxy install --vendor codex --profile default --version latest
+ccg auth sync --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg service reconcile --vendor codex --profile default
+ccg service stop --vendor codex --profile default
+ccg claude apply --vendor codex --profile default
+ccg claude revert --vendor codex --profile default
+ccg model switch --vendor codex --profile default --model codex-spark
+ccg failover --from codex:default --to claude:default --model claude-sonnet-4-6
+ccg use --vendor codex --profile default
+ccg uninstall --vendor codex --profile default
+ccg uninstall --vendor codex --profile default --purge
 ```
 
 Read-only commands can target explicit scope or active scope:
 
 ```bash
-ccb status --vendor codex --profile default
-ccb status --active
-ccb status --vendor codex --profile default --json
-ccb service status --vendor codex --profile default
-ccb service status --active
-ccb doctor --vendor codex --profile default
-ccb doctor --active
-ccb doctor --vendor codex --profile default --verbose
-ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
-ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
-ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md
+ccg status --vendor codex --profile default
+ccg status --active
+ccg status --vendor codex --profile default --json
+ccg service status --vendor codex --profile default
+ccg service status --active
+ccg doctor --vendor codex --profile default
+ccg doctor --active
+ccg doctor --vendor codex --profile default --verbose
+ccg preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccg preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
+ccg handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccg-handoff.md
 ```
 
 Backend runtime entrypoint (no scope flags, used by builtin wrapper):
 
 ```bash
-ccb gateway serve --config <path>
+ccg gateway serve --config <path>
 ```
 
 ## Design guarantees
@@ -359,7 +359,7 @@ settings_path: "/path/to/project/.claude/settings.json"
 ## Build and test
 
 ```bash
-go build -o ccb ./cmd/ccb
+go build -o ccg ./cmd/ccg
 go vet ./...
 go test ./...
 go test -race ./...
@@ -372,9 +372,9 @@ go test -race ./...
 This indicates proxy alias config is stale. Regenerate scope service/config:
 
 ```bash
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 Restarting Claude Code alone does not fix this.
@@ -387,14 +387,14 @@ Use one of:
 
 ```bash
 # stay on codex gateway
-ccb model switch --vendor codex --profile default --model gpt-5.3-codex
-ccb model switch --vendor codex --profile default --model gpt-5.3-codex-spark
+ccg model switch --vendor codex --profile default --model gpt-5.3-codex
+ccg model switch --vendor codex --profile default --model gpt-5.3-codex-spark
 ```
 
 ```bash
 # fallback away from codex gateway (token/quota exhausted path)
-ccb setup --vendor codex --profile default --runtime-mode native-cleanup
-ccb doctor --vendor codex --profile default
+ccg setup --vendor codex --profile default --runtime-mode native-cleanup
+ccg doctor --vendor codex --profile default
 ```
 
 ### `model switch` fails with `proxy binary missing`
@@ -402,9 +402,9 @@ ccb doctor --vendor codex --profile default
 This scope was only bootstrapped (or proxy artifact was removed), so there is no local proxy binary to re-render/restart service.
 
 ```bash
-ccb setup --vendor codex --profile <profile> --gateway-backend cliproxyapi --model gpt-5.3-codex
+ccg setup --vendor codex --profile <profile> --gateway-backend cliproxyapi --model gpt-5.3-codex
 # or minimal recovery
-ccb proxy install --vendor codex --profile <profile>
+ccg proxy install --vendor codex --profile <profile>
 ```
 
 ### `setup` fails at service start (`ERR_SWITCH_VALIDATION_FAILED`, `connect: connection refused`)
@@ -412,9 +412,9 @@ ccb proxy install --vendor codex --profile <profile>
 `setup` already retries once automatically (`service install -> service start`) for known signatures. If it still fails, run:
 
 ```bash
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 ### `service install` fails midway and service manager state looks inconsistent
@@ -423,17 +423,17 @@ ccb doctor --vendor codex --profile default
 Retry with the standard chain (manual `launchctl load` should not be required):
 
 ```bash
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 **Linux:** If `service install` fails midway, stale systemd units may remain. The standard recovery chain handles cleanup:
 
 ```bash
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 If units remain stuck, manually reset before retrying:
@@ -442,8 +442,8 @@ If units remain stuck, manually reset before retrying:
 systemctl --user stop ccgateway-codex-default-proxy.service 2>/dev/null
 systemctl --user disable ccgateway-codex-default-proxy.service 2>/dev/null
 systemctl --user daemon-reload
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
 ```
 
 ### `ERR_POLICY_VIOLATION` appears
@@ -451,7 +451,7 @@ ccb service start --vendor codex --profile default
 Strict codex policy guard blocked the command. Typical fix is to keep settings scoped per project:
 
 ```bash
-ccb setup --vendor codex --profile default --settings-layer project
+ccg setup --vendor codex --profile default --settings-layer project
 ```
 
 ### macOS: `ERR_LAUNCHCTL_FAILED` with `Could not find service ... sync`
@@ -459,8 +459,8 @@ ccb setup --vendor codex --profile default --settings-layer project
 `setup` already retries once automatically for this signature. If it still fails, re-run service install first:
 
 ```bash
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
 ```
 
 ### Linux: `ERR_SYSTEMD_FAILED` with `Unit not found` or `Failed to start`
@@ -470,9 +470,9 @@ Ensure user linger is enabled and systemd user session is available:
 ```bash
 loginctl enable-linger "$(whoami)"
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb doctor --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg doctor --vendor codex --profile default
 ```
 
 ### Tool calls fail with missing required parameters (`input: {}` in proxy transcripts)
@@ -482,11 +482,11 @@ If logs repeatedly show errors like `The required parameter 'query|pattern|comma
 Run:
 
 ```bash
-ccb auth sync --vendor codex --profile default
-ccb service install --vendor codex --profile default
-ccb service start --vendor codex --profile default
-ccb model switch --vendor codex --profile default --model gpt-5.3-codex
-ccb doctor --vendor codex --profile default
+ccg auth sync --vendor codex --profile default
+ccg service install --vendor codex --profile default
+ccg service start --vendor codex --profile default
+ccg model switch --vendor codex --profile default --model gpt-5.3-codex
+ccg doctor --vendor codex --profile default
 ```
 
 `doctor` now includes a `tool-call integrity` check and reports this pattern directly.
@@ -496,11 +496,11 @@ ccb doctor --vendor codex --profile default
 That section is history-only and does not mean current checks failed. To clear history:
 
 ```bash
-ccb doctor --vendor codex --profile default --clear-error-history
+ccg doctor --vendor codex --profile default --clear-error-history
 ```
 
 Example: old `ERR_INVALID_ARGS` entries from earlier unsupported/incorrect status usages
-(`status --since 24h`, `ccb-status --since 24h`) can still appear in history even when
+(`status --since 24h`, `ccg-status --since 24h`) can still appear in history even when
 current checks are all `[OK]`.
 
 ### `claude revert` fails or user-level settings got tangled
@@ -515,7 +515,7 @@ p=os.path.expanduser("~/.claude/settings.json")
 os.makedirs(os.path.dirname(p), exist_ok=True)
 if not os.path.exists(p):
     open(p, "w").write("{}\n")
-bak=p+f".bak.ccb-recovery.{int(time.time())}"
+bak=p+f".bak.ccg-recovery.{int(time.time())}"
 shutil.copy2(p, bak)
 d=json.load(open(p))
 if not isinstance(d, dict):
@@ -540,9 +540,9 @@ PY
 
 ```bash
 # 2) rebind each scope to project-local settings
-ccb setup --vendor codex --profile default --settings-layer project
+ccg setup --vendor codex --profile default --settings-layer project
 # example for another project profile
-ccb setup --vendor codex --profile <profile> --settings-layer project
+ccg setup --vendor codex --profile <profile> --settings-layer project
 ```
 
 ```bash
@@ -565,8 +565,8 @@ PY
 After recovery, apply only in the target project cwd:
 
 ```bash
-ccb claude apply --vendor codex --profile <profile>
-ccb doctor --vendor codex --profile <profile>
+ccg claude apply --vendor codex --profile <profile>
+ccg doctor --vendor codex --profile <profile>
 ```
 
 ## License

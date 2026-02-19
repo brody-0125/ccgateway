@@ -15,12 +15,12 @@ func TestInstallAgentsCleansUpOnProxyBootstrapFailure(t *testing.T) {
 	proxyPlistPath := filepath.Join(tmp, "launchd", "proxy.plist")
 	syncPlistPath := filepath.Join(tmp, "launchd", "sync.plist")
 
-	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"${CCB_TEST_LAUNCHCTL_LOG}\"\nif [[ \"${1:-}\" == \"bootstrap\" && \"${3:-}\" == \"${CCB_TEST_FAIL_PROXY_PLIST}\" ]]; then\n  printf 'simulated proxy bootstrap failure\\n' >&2\n  exit 17\nfi\nexit 0\n"
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"${CCG_TEST_LAUNCHCTL_LOG}\"\nif [[ \"${1:-}\" == \"bootstrap\" && \"${3:-}\" == \"${CCG_TEST_FAIL_PROXY_PLIST}\" ]]; then\n  printf 'simulated proxy bootstrap failure\\n' >&2\n  exit 17\nfi\nexit 0\n"
 	if err := os.WriteFile(stubPath, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_TEST_LAUNCHCTL_LOG", logPath)
-	t.Setenv("CCB_TEST_FAIL_PROXY_PLIST", proxyPlistPath)
+	t.Setenv("CCG_TEST_LAUNCHCTL_LOG", logPath)
+	t.Setenv("CCG_TEST_FAIL_PROXY_PLIST", proxyPlistPath)
 
 	mgr := &Manager{UID: os.Getuid(), LaunchctlBin: stubPath}
 	files := AgentFiles{

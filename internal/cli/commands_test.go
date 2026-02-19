@@ -160,8 +160,8 @@ func TestProxyInstallRejectsUnexpectedPositionalArgs(t *testing.T) {
 
 func TestProxyInstallRejectsNativeMode(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -237,9 +237,9 @@ func TestSetupNormalizesCodexSparkModelAlias(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -299,9 +299,9 @@ func TestSetupAppliesProjectSettingsLayer(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpCwd)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpCwd)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -357,8 +357,8 @@ func TestSetupAppliesProjectSettingsLayer(t *testing.T) {
 
 func TestBootstrapRejectsClaudeSelectorModelForCodex(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -382,8 +382,8 @@ func TestBootstrapRejectsClaudeSelectorModelForCodex(t *testing.T) {
 
 func TestBootstrapPolicyStrictRejectsUserSettingsLayer(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -406,8 +406,8 @@ func TestBootstrapPolicyStrictRejectsUserSettingsLayer(t *testing.T) {
 
 func TestBootstrapPolicyCompatRejectedForCodex(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -434,8 +434,8 @@ func TestBootstrapSettingsLayerChangeResolvesDefaultPath(t *testing.T) {
 	if err := os.MkdirAll(tmpCwd, 0o755); err != nil {
 		t.Fatalf("mkdir cwd failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app := &application{
 		home:            tmpHome,
@@ -478,8 +478,8 @@ func TestBootstrapSettingsLayerChangeResolvesDefaultPath(t *testing.T) {
 
 func TestModelSwitchRejectsInactiveScope(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -506,8 +506,8 @@ func TestModelSwitchRejectsInactiveScope(t *testing.T) {
 
 func TestModelSwitchRejectsNativeScope(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -534,8 +534,8 @@ func TestModelSwitchRejectsNativeScope(t *testing.T) {
 
 func TestModelSwitchRejectsClaudeSelectorModelForCodex(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -568,8 +568,8 @@ func TestModelCommandAcceptsDashHelp(t *testing.T) {
 
 func TestModelSwitchFailsFastWhenProxyBinaryMissing(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -687,14 +687,14 @@ func TestSetupNativeCleanupFlow(t *testing.T) {
 	tmpHome := t.TempDir()
 	logFile := filepath.Join(tmpHome, "launchctl.log")
 	stub := filepath.Join(tmpHome, "launchctl")
-	stubScript := "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$CCB_TEST_LAUNCHCTL_LOG\"\nprintf 'Could not find service\\n' >&2\nexit 1\n"
+	stubScript := "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$CCG_TEST_LAUNCHCTL_LOG\"\nprintf 'Could not find service\\n' >&2\nexit 1\n"
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
-	t.Setenv("CCB_TEST_LAUNCHCTL_LOG", logFile)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_TEST_LAUNCHCTL_LOG", logFile)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -739,14 +739,14 @@ func TestSetupRecoversServiceStartByReinstallingAgents(t *testing.T) {
 	tmpHome := t.TempDir()
 	stub := filepath.Join(tmpHome, "launchctl")
 	marker := filepath.Join(tmpHome, "kickstart-sync.failed.once")
-	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nmarker=\"${CCB_TEST_RECOVER_MARKER:-/tmp/ccb-recover-marker}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".sync\" ]] && [[ ! -f \"$marker\" ]]; then\n    touch \"$marker\"\n    printf 'Could not find service\\n' >&2\n    exit 113\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nmarker=\"${CCG_TEST_RECOVER_MARKER:-/tmp/ccg-recover-marker}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".sync\" ]] && [[ ! -f \"$marker\" ]]; then\n    touch \"$marker\"\n    printf 'Could not find service\\n' >&2\n    exit 113\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
-	t.Setenv("CCB_TEST_RECOVER_MARKER", marker)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_TEST_RECOVER_MARKER", marker)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -807,9 +807,9 @@ func TestServiceReconcileInstallsAndStartsService(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -867,14 +867,14 @@ func TestServiceStartAutoRecoversViaReconcile(t *testing.T) {
 	tmpHome := t.TempDir()
 	stub := filepath.Join(tmpHome, "launchctl")
 	marker := filepath.Join(tmpHome, "kickstart-sync.failed.once")
-	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nmarker=\"${CCB_TEST_RECOVER_MARKER:-/tmp/ccb-recover-marker}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".sync\" ]] && [[ ! -f \"$marker\" ]]; then\n    touch \"$marker\"\n    printf 'Could not find service\\n' >&2\n    exit 113\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nmarker=\"${CCG_TEST_RECOVER_MARKER:-/tmp/ccg-recover-marker}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".sync\" ]] && [[ ! -f \"$marker\" ]]; then\n    touch \"$marker\"\n    printf 'Could not find service\\n' >&2\n    exit 113\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
-	t.Setenv("CCB_TEST_RECOVER_MARKER", marker)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_TEST_RECOVER_MARKER", marker)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -936,8 +936,8 @@ func TestServiceStartAutoRecoversViaReconcile(t *testing.T) {
 
 func TestDoctorClearErrorHistoryFlag(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -973,8 +973,8 @@ func TestDoctorClearErrorHistoryFlag(t *testing.T) {
 
 func TestServiceInstallRejectsNativeMode(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1000,8 +1000,8 @@ func TestServiceInstallRejectsNativeMode(t *testing.T) {
 
 func TestBootstrapRejectsNativeForNewScope(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1021,8 +1021,8 @@ func TestBootstrapRejectsNativeForNewScope(t *testing.T) {
 
 func TestBootstrapRejectsUnknownGatewayBackend(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1039,8 +1039,8 @@ func TestBootstrapRejectsUnknownGatewayBackend(t *testing.T) {
 
 func TestLoadRuntimeAllowsMissingBackendInNativeCleanupMode(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1068,8 +1068,8 @@ func TestLoadRuntimeAllowsMissingBackendInNativeCleanupMode(t *testing.T) {
 
 func TestServiceInvalidSubcommandDoesNotCreateScopeFiles(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1091,8 +1091,8 @@ func TestServiceInvalidSubcommandDoesNotCreateScopeFiles(t *testing.T) {
 
 func TestClaudeInvalidSubcommandDoesNotCreateScopeFiles(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1170,8 +1170,8 @@ func TestAllowSettingsMutation(t *testing.T) {
 
 func TestClaudeRevertRejectsGenerationMismatch(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1220,8 +1220,8 @@ func TestClaudeRevertRejectsGenerationMismatch(t *testing.T) {
 
 func TestClaudeApplyUpdatesActiveGenerationWhenScopeIsActive(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1263,8 +1263,8 @@ func TestClaudeApplyUpdatesActiveGenerationWhenScopeIsActive(t *testing.T) {
 
 func TestClaudeApplyDoesNotMutateActiveGenerationForInactiveScope(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1312,8 +1312,8 @@ func TestClaudeApplyRejectsProjectSettingsPathMismatch(t *testing.T) {
 	if err := os.MkdirAll(cwdB, 0o755); err != nil {
 		t.Fatalf("mkdir project-b failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", cwdA)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", cwdA)
 
 	appA, err := newApplication()
 	if err != nil {
@@ -1345,8 +1345,8 @@ func TestClaudeApplyRejectsProjectSettingsPathMismatch(t *testing.T) {
 
 func TestClaudeApplyPreservesOriginalSnapshotAcrossReapply(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1363,7 +1363,7 @@ func TestClaudeApplyPreservesOriginalSnapshotAcrossReapply(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(paths.ClaudeUserSettingsPath), 0o755); err != nil {
 		t.Fatalf("mkdir settings dir failed: %v", err)
 	}
-	original := []byte("{\n  \"model\": \"gpt-5.3-codex\",\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccb::codex::default::gen-1\",\n    \"ANTHROPIC_MODEL\": \"gpt-5.3-codex\",\n    \"custom\": \"keep\"\n  }\n}\n")
+	original := []byte("{\n  \"model\": \"gpt-5.3-codex\",\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccg::codex::default::gen-1\",\n    \"ANTHROPIC_MODEL\": \"gpt-5.3-codex\",\n    \"custom\": \"keep\"\n  }\n}\n")
 	if err := os.WriteFile(paths.ClaudeUserSettingsPath, original, 0o600); err != nil {
 		t.Fatalf("write original settings failed: %v", err)
 	}
@@ -1407,8 +1407,8 @@ func TestClaudeApplyPreservesOriginalSnapshotAcrossReapply(t *testing.T) {
 
 func TestUsePreservesOriginalSnapshotAcrossReapply(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	tmpCwd := filepath.Join(tmpHome, "workspace")
 	if err := os.MkdirAll(tmpCwd, 0o755); err != nil {
 		t.Fatalf("mkdir workspace failed: %v", err)
@@ -1492,9 +1492,9 @@ func TestUninstallBlocksUnsafeClaudeRevertForActiveScope(t *testing.T) {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
 
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1549,9 +1549,9 @@ func TestUninstallSkipsUnsafeClaudeRevertForInactiveScope(t *testing.T) {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
 
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1669,9 +1669,9 @@ func TestServiceStartRetriesHealthCheckUntilReady(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -1759,9 +1759,9 @@ func TestBootstrapReallocatesBusyPortWhenLaunchdServiceMissing(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -1818,9 +1818,9 @@ func TestUninstallPurgeFailsWhenActivePointerUnreadable(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1849,8 +1849,8 @@ func TestUninstallPurgeFailsWhenActivePointerUnreadable(t *testing.T) {
 
 func TestBootstrapNativeSkipsPortRegistryAllocation(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1872,14 +1872,14 @@ func TestUninstallUsesStoredServiceLabels(t *testing.T) {
 	tmpHome := t.TempDir()
 	logFile := filepath.Join(tmpHome, "launchctl.log")
 	stub := filepath.Join(tmpHome, "launchctl")
-	stubScript := "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$CCB_TEST_LAUNCHCTL_LOG\"\nprintf 'Could not find service\\n' >&2\nexit 1\n"
+	stubScript := "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$CCG_TEST_LAUNCHCTL_LOG\"\nprintf 'Could not find service\\n' >&2\nexit 1\n"
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
-	t.Setenv("CCB_TEST_LAUNCHCTL_LOG", logFile)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_TEST_LAUNCHCTL_LOG", logFile)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1913,8 +1913,8 @@ func TestUninstallUsesStoredServiceLabels(t *testing.T) {
 
 func TestLogFailureWritesScopeErrorLog(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -2030,9 +2030,9 @@ func TestModelSwitchSuccessAppliesSparkModel(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	app, err := newApplication()
 	if err != nil {
@@ -2138,9 +2138,9 @@ func TestModelSwitchRollsBackConfigStateAndSettingsOnDoctorFailure(t *testing.T)
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	backendReg := backend.NewRegistry()
 	if err := backendReg.Register(backend.Bundle{
@@ -2244,8 +2244,8 @@ func TestModelSwitchRollsBackConfigStateAndSettingsOnDoctorFailure(t *testing.T)
 
 func TestUseRejectsExpectedActiveMismatch(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -2290,9 +2290,9 @@ func TestModelSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	app, err := newApplication()
 	if err != nil {
@@ -2408,9 +2408,9 @@ func TestFailoverConcurrentSourceChangeFailsWithoutClobberingActive(t *testing.T
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
@@ -2527,8 +2527,8 @@ func TestUseAllowsNativeDirectScope(t *testing.T) {
 
 func TestFailoverCodexToClaudeNativeDirectSuccess(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -2591,8 +2591,8 @@ func TestFailoverCodexToClaudeNativeDirectSuccess(t *testing.T) {
 
 func TestFailoverRollsBackOnDoctorFailure(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	var revertCalls int32
 	reg := provider.NewRegistry()
@@ -2670,8 +2670,8 @@ func TestFailoverRollsBackOnDoctorFailure(t *testing.T) {
 
 func TestFailoverRestoresTargetScopeOnBootstrapFailure(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -2757,8 +2757,8 @@ func TestFailoverRejectsMismatchedExistingTargetBeforeMutation(t *testing.T) {
 		t.Fatalf("mkdir project-b failed: %v", err)
 	}
 
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", cwdA)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", cwdA)
 	appA, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication project-a failed: %v", err)
@@ -2781,7 +2781,7 @@ func TestFailoverRejectsMismatchedExistingTargetBeforeMutation(t *testing.T) {
 		t.Fatalf("unexpected baseline target model: %s", targetBefore.Config.Model)
 	}
 
-	t.Setenv("CCB_CWD", cwdB)
+	t.Setenv("CCG_CWD", cwdB)
 	appB, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication project-b failed: %v", err)
@@ -2822,14 +2822,14 @@ func TestFailoverRejectsMismatchedExistingTargetBeforeMutation(t *testing.T) {
 func TestFailoverRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 	tmpHome := t.TempDir()
 	stub := filepath.Join(tmpHome, "launchctl")
-	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".ccb.codex.target.\"* ]]; then\n    printf 'simulated target kickstart failure\\n' >&2\n    exit 91\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".ccg.codex.target.\"* ]]; then\n    printf 'simulated target kickstart failure\\n' >&2\n    exit 91\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
 
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
@@ -2907,9 +2907,9 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	// Allocate port for proxy mock.
 	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
@@ -3025,8 +3025,8 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 
 func TestPreflightCodexToClaudeReturnsNoBlockingFailures(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3051,8 +3051,8 @@ func TestPreflightCodexToClaudeReturnsNoBlockingFailures(t *testing.T) {
 
 func TestPreflightBlocksInvalidTargetModelPolicy(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3080,8 +3080,8 @@ func TestPreflightBlocksInvalidTargetModelPolicy(t *testing.T) {
 
 func TestHandoffCreateWritesMarkdownBundle(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3113,15 +3113,15 @@ func TestHandoffCreateWritesMarkdownBundle(t *testing.T) {
 	if !strings.Contains(text, "# ccgateway failover handoff") {
 		t.Fatalf("unexpected handoff heading: %s", text)
 	}
-	if !strings.Contains(text, "ccb failover --from codex:default --to claude:default --model claude-opus-4-6") {
+	if !strings.Contains(text, "ccg failover --from codex:default --to claude:default --model claude-opus-4-6") {
 		t.Fatalf("expected failover command in handoff bundle, got: %s", text)
 	}
 }
 
 func TestScopeSwitchCodexToClaudeNativeDirectSuccess(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3193,8 +3193,8 @@ func TestScopeSwitchCodexToClaudeNativeDirectSuccess(t *testing.T) {
 
 func TestScopeSwitchDryRunDoesNotMutate(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3237,8 +3237,8 @@ func TestScopeSwitchDryRunDoesNotMutate(t *testing.T) {
 
 func TestScopeSwitchRejectsInactiveSource(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3267,8 +3267,8 @@ func TestScopeSwitchRejectsInactiveSource(t *testing.T) {
 
 func TestScopeSwitchRejectsBadModel(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3294,8 +3294,8 @@ func TestScopeSwitchRejectsBadModel(t *testing.T) {
 
 func TestScopeSwitchRollsBackOnDoctorFailure(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	var revertCalls int32
 	reg := provider.NewRegistry()
@@ -3378,9 +3378,9 @@ func TestScopeSwitchRoundtripCodexClaudeCodex(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	// Allocate port for proxy mock.
 	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
@@ -3498,8 +3498,8 @@ func TestScopeSwitchRoundtripCodexClaudeCodex(t *testing.T) {
 
 func TestScopeSwitchRejectsNativeCleanupTarget(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3531,8 +3531,8 @@ func TestScopeSwitchRejectsNativeCleanupTarget(t *testing.T) {
 
 func TestScopeSwitchExistingTargetPreservesConfig(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3583,8 +3583,8 @@ func TestScopeSwitchExistingTargetPreservesConfig(t *testing.T) {
 
 func TestScopeSwitchRejectsNoArgs(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3597,8 +3597,8 @@ func TestScopeSwitchRejectsNoArgs(t *testing.T) {
 
 func TestScopeSwitchRejectsInvalidSubcommand(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3615,8 +3615,8 @@ func TestScopeSwitchRejectsInvalidSubcommand(t *testing.T) {
 
 func TestScopeCommandAcceptsDashHelp(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3632,8 +3632,8 @@ func TestScopeCommandAcceptsDashHelp(t *testing.T) {
 
 func TestScopeSwitchRejectsMissingFromFlag(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3650,8 +3650,8 @@ func TestScopeSwitchRejectsMissingFromFlag(t *testing.T) {
 
 func TestScopeSwitchRejectsMissingModelFlag(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3671,8 +3671,8 @@ func TestScopeSwitchRejectsMissingModelFlag(t *testing.T) {
 
 func TestScopeSwitchRejectsMissingToFlag(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3692,8 +3692,8 @@ func TestScopeSwitchRejectsMissingToFlag(t *testing.T) {
 
 func TestScopeSwitchRejectsExtraArgs(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3718,8 +3718,8 @@ func TestScopeSwitchRejectsExtraArgs(t *testing.T) {
 
 func TestScopeSwitchRejectsSameScope(t *testing.T) {
 	tmpHome := t.TempDir()
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
 
 	app, err := newApplication()
 	if err != nil {
@@ -3748,9 +3748,9 @@ func TestScopeSwitchGatewayTargetSuccess(t *testing.T) {
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	// Allocate a free port for the proxy mock.
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
@@ -3873,9 +3873,9 @@ func TestScopeSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
@@ -3966,14 +3966,14 @@ func TestScopeSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 func TestScopeSwitchRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 	tmpHome := t.TempDir()
 	stub := filepath.Join(tmpHome, "launchctl")
-	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".ccb.codex.target.\"* ]]; then\n    printf 'simulated target kickstart failure\\n' >&2\n    exit 91\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
+	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"$cmd\" == \"kickstart\" ]]; then\n  target=\"${3:-}\"\n  if [[ \"$target\" == *\".ccg.codex.target.\"* ]]; then\n    printf 'simulated target kickstart failure\\n' >&2\n    exit 91\n  fi\nfi\nif [[ \"$cmd\" == \"print\" ]]; then\n  exit 0\nfi\nexit 0\n"
 	if err := os.WriteFile(stub, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("write launchctl stub failed: %v", err)
 	}
 
-	t.Setenv("CCB_HOME", tmpHome)
-	t.Setenv("CCB_CWD", tmpHome)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_HOME", tmpHome)
+	t.Setenv("CCG_CWD", tmpHome)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {

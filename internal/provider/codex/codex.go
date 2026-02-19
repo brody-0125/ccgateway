@@ -32,7 +32,7 @@ func (authStrategy) Sync(_ context.Context, rt provider.ScopeRuntime) error {
 
 func (claudePatcher) Apply(_ context.Context, rt provider.ScopeRuntime, generation string) (claude.ApplyResult, error) {
 	mode := claude.ApplyModeGateway
-	token := fmt.Sprintf("ccb::%s::%s::%s", rt.Ref.VendorID, rt.Ref.ProfileID, generation)
+	token := fmt.Sprintf("ccg::%s::%s::%s", rt.Ref.VendorID, rt.Ref.ProfileID, generation)
 	if rt.Config.RuntimeMode == config.RuntimeModeNativeCleanup || !rt.Config.ProxyEnabled {
 		mode = claude.ApplyModeNativeCleanup
 		token = ""
