@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	claudesettings "ccgateway/internal/claude"
 	"ccgateway/internal/config"
 	"ccgateway/internal/scope"
 )
@@ -72,16 +73,7 @@ func hasRoutingOverride(path string) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	keys := []string{
-		"ANTHROPIC_BASE_URL",
-		"ANTHROPIC_AUTH_TOKEN",
-		"ANTHROPIC_MODEL",
-		"ANTHROPIC_SMALL_FAST_MODEL",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
-	}
-	for _, k := range keys {
+	for _, k := range claudesettings.ManagedEnvKeys() {
 		if _, ok := env[k]; ok {
 			return true, nil
 		}

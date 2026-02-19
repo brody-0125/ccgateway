@@ -1400,8 +1400,19 @@ func TestClaudeApplyPreservesOriginalSnapshotAcrossReapply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read restored settings failed: %v", err)
 	}
-	if string(restored) != string(original) {
-		t.Fatalf("revert should restore original settings\nwant:\n%s\ngot:\n%s", string(original), string(restored))
+	// SmartRevert re-serialises via json.MarshalIndent which sorts keys
+	// alphabetically, so compare semantically instead of byte-for-byte.
+	var wantDoc, gotDoc map[string]any
+	if err := json.Unmarshal(original, &wantDoc); err != nil {
+		t.Fatalf("parse original failed: %v", err)
+	}
+	if err := json.Unmarshal(restored, &gotDoc); err != nil {
+		t.Fatalf("parse restored failed: %v", err)
+	}
+	wantJSON, _ := json.MarshalIndent(wantDoc, "", "  ")
+	gotJSON, _ := json.MarshalIndent(gotDoc, "", "  ")
+	if string(wantJSON) != string(gotJSON) {
+		t.Fatalf("revert should restore original settings\nwant:\n%s\ngot:\n%s", string(wantJSON), string(gotJSON))
 	}
 }
 
@@ -1479,8 +1490,19 @@ func TestUsePreservesOriginalSnapshotAcrossReapply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read restored settings failed: %v", err)
 	}
-	if string(restored) != string(original) {
-		t.Fatalf("revert should restore original settings\nwant:\n%s\ngot:\n%s", string(original), string(restored))
+	// SmartRevert re-serialises via json.MarshalIndent which sorts keys
+	// alphabetically, so compare semantically instead of byte-for-byte.
+	var wantDoc2, gotDoc2 map[string]any
+	if err := json.Unmarshal(original, &wantDoc2); err != nil {
+		t.Fatalf("parse original failed: %v", err)
+	}
+	if err := json.Unmarshal(restored, &gotDoc2); err != nil {
+		t.Fatalf("parse restored failed: %v", err)
+	}
+	wantJSON2, _ := json.MarshalIndent(wantDoc2, "", "  ")
+	gotJSON2, _ := json.MarshalIndent(gotDoc2, "", "  ")
+	if string(wantJSON2) != string(gotJSON2) {
+		t.Fatalf("revert should restore original settings\nwant:\n%s\ngot:\n%s", string(wantJSON2), string(gotJSON2))
 	}
 }
 
@@ -4113,8 +4135,13 @@ func (noopClaudePatcher) Revert(_ context.Context, _ provider.ScopeRuntime, _, _
 	return nil
 }
 
+func (noopClaudePatcher) SmartRevert(_ context.Context, _ provider.ScopeRuntime, _, _ string) error {
+	return nil
+}
+
 type countingClaudePatcher struct {
-	revertCalls *int32
+	revertCalls      *int32
+	smartRevertCalls *int32
 }
 
 func (p *countingClaudePatcher) Apply(_ context.Context, _ provider.ScopeRuntime, _ string) (claudepkg.ApplyResult, error) {
@@ -4124,6 +4151,13 @@ func (p *countingClaudePatcher) Apply(_ context.Context, _ provider.ScopeRuntime
 func (p *countingClaudePatcher) Revert(_ context.Context, _ provider.ScopeRuntime, _, _ string) error {
 	if p != nil && p.revertCalls != nil {
 		atomic.AddInt32(p.revertCalls, 1)
+	}
+	return nil
+}
+
+func (p *countingClaudePatcher) SmartRevert(_ context.Context, _ provider.ScopeRuntime, _, _ string) error {
+	if p != nil && p.smartRevertCalls != nil {
+		atomic.AddInt32(p.smartRevertCalls, 1)
 	}
 	return nil
 }
