@@ -1,5 +1,6 @@
 # Binaries
 /ccb
+/ccb-test-bin
 
 # macOS
 .DS_Store
