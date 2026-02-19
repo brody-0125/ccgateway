@@ -53,6 +53,12 @@ sudo ./scripts/install_ccb.sh --repo <owner>/<repo> --version latest --install-d
 scripts/verify_ccb.sh --binary /usr/local/bin/ccb
 ```
 
+Artifact checksum verification only (CI/release, no binary install):
+
+```bash
+./scripts/verify_ccb.sh --checksums ./dist/checksums.txt --skip-binary
+```
+
 ### 3) One-shot setup (recommended)
 
 ```bash
@@ -219,26 +225,6 @@ ccb uninstall --vendor codex --profile default
 # full cleanup
 ccb uninstall --vendor codex --profile default --purge
 ```
-
-### Artifact checksum verification only
-
-```bash
-./scripts/verify_ccb.sh --checksums ./dist/checksums.txt --skip-binary
-```
-
-## Notes
-
-- The project supports macOS and Linux for install/runtime operations.
-- macOS uses `launchd` (launchctl) for service management; Linux uses `systemd` (systemctl --user) with user linger enabled.
-- If `/usr/local/bin` is used and not writable, `install_ccb.sh` may require `sudo`.
-
-### Linux-specific agent prerequisites
-
-Before running install/setup on Linux, the agent should verify:
-
-1. `systemd` is available (`systemctl --user` must work).
-2. User linger is enabled: `loginctl enable-linger "$(whoami)"`.
-3. `XDG_RUNTIME_DIR` is set (typically `/run/user/$(id -u)`).
 
 ## Agent-first interactive setup (no manual step-by-step)
 
