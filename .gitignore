@@ -1,6 +1,9 @@
 # Binaries
 /ccb
 
+# IDE
+.idea/
+
 # macOS
 .DS_Store
 
