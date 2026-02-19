@@ -2,10 +2,12 @@ package claude
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ccgateway/internal/state"
 )
@@ -527,5 +529,132 @@ func TestSmartRevertWhenUserRemovesEnv(t *testing.T) {
 		if _, ok := resEnv[key]; ok {
 			t.Fatalf("expected managed env key %s absent, got=%v", key, resEnv[key])
 		}
+	}
+}
+
+func TestCollectSnapshotsRemovesOldFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create 8 snapshot files with staggered mtime.
+	var paths []string
+	for i := 0; i < 8; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("claude-settings-%d.json", i))
+		if err := os.WriteFile(p, []byte("{}"), 0o600); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+		// Set mtime so file 0 is oldest, file 7 is newest.
+		ts := time.Now().Add(time.Duration(i-8) * time.Minute)
+		os.Chtimes(p, ts, ts)
+		paths = append(paths, p)
+	}
+
+	res := CollectSnapshots(dir, 5, nil)
+	if len(res.Removed) != 3 {
+		t.Fatalf("expected 3 removed, got %d (removed=%v kept=%v)", len(res.Removed), res.Removed, res.Kept)
+	}
+	if len(res.Kept) != 5 {
+		t.Fatalf("expected 5 kept, got %d", len(res.Kept))
+	}
+	for _, e := range res.Errors {
+		t.Errorf("unexpected error: %v", e)
+	}
+
+	// The 3 oldest files should be gone.
+	for i := 0; i < 3; i++ {
+		if _, err := os.Stat(paths[i]); !os.IsNotExist(err) {
+			t.Errorf("expected %s removed, still exists", filepath.Base(paths[i]))
+		}
+	}
+	// The 5 newest should remain.
+	for i := 3; i < 8; i++ {
+		if _, err := os.Stat(paths[i]); err != nil {
+			t.Errorf("expected %s kept, got err: %v", filepath.Base(paths[i]), err)
+		}
+	}
+}
+
+func TestCollectSnapshotsProtectsReferencedFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create 4 snapshot files: oldest one is protected.
+	var paths []string
+	for i := 0; i < 4; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("snap-%d.json", i))
+		os.WriteFile(p, []byte("{}"), 0o600)
+		ts := time.Now().Add(time.Duration(i-4) * time.Minute)
+		os.Chtimes(p, ts, ts)
+		paths = append(paths, p)
+	}
+
+	// Retain 2, but protect the oldest (paths[0]).
+	protected := map[string]bool{paths[0]: true}
+	res := CollectSnapshots(dir, 2, protected)
+
+	// paths[0] is oldest but protected → kept.
+	// paths[1] is second-oldest, not protected, over retain → removed.
+	if len(res.Removed) != 1 {
+		t.Fatalf("expected 1 removed, got %d (removed=%v)", len(res.Removed), res.Removed)
+	}
+	if res.Removed[0] != paths[1] {
+		t.Fatalf("expected %s removed, got %s", filepath.Base(paths[1]), filepath.Base(res.Removed[0]))
+	}
+	if _, err := os.Stat(paths[0]); err != nil {
+		t.Fatalf("protected file should still exist: %v", err)
+	}
+}
+
+func TestCollectSnapshotsEmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	res := CollectSnapshots(dir, 5, nil)
+	if len(res.Removed) != 0 || len(res.Kept) != 0 || len(res.Errors) != 0 {
+		t.Fatalf("expected empty result for empty dir, got removed=%d kept=%d errors=%d",
+			len(res.Removed), len(res.Kept), len(res.Errors))
+	}
+}
+
+func TestCollectSnapshotsNonexistentDir(t *testing.T) {
+	res := CollectSnapshots("/tmp/nonexistent-gc-test-dir-xyz", 5, nil)
+	if len(res.Removed) != 0 || len(res.Kept) != 0 || len(res.Errors) != 0 {
+		t.Fatalf("expected empty result for nonexistent dir, got removed=%d kept=%d errors=%d",
+			len(res.Removed), len(res.Kept), len(res.Errors))
+	}
+}
+
+func TestCollectSnapshotsIgnoresNonJSON(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a mix of .json and non-.json files.
+	os.WriteFile(filepath.Join(dir, "snap-1.json"), []byte("{}"), 0o600)
+	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("hello"), 0o600)
+	os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("key: val"), 0o600)
+	os.MkdirAll(filepath.Join(dir, "subdir"), 0o755)
+
+	res := CollectSnapshots(dir, 5, nil)
+	// Only snap-1.json counted, within retain limit.
+	if len(res.Kept) != 1 {
+		t.Fatalf("expected 1 kept, got %d", len(res.Kept))
+	}
+	if len(res.Removed) != 0 {
+		t.Fatalf("expected 0 removed, got %d", len(res.Removed))
+	}
+}
+
+func TestCollectSnapshotsDefaultRetain(t *testing.T) {
+	dir := t.TempDir()
+
+	for i := 0; i < 7; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("s-%d.json", i))
+		os.WriteFile(p, []byte("{}"), 0o600)
+		ts := time.Now().Add(time.Duration(i-7) * time.Minute)
+		os.Chtimes(p, ts, ts)
+	}
+
+	// retain=0 should default to 5.
+	res := CollectSnapshots(dir, 0, nil)
+	if len(res.Removed) != 2 {
+		t.Fatalf("expected 2 removed with default retain=5, got %d", len(res.Removed))
+	}
+	if len(res.Kept) != 5 {
+		t.Fatalf("expected 5 kept with default retain=5, got %d", len(res.Kept))
 	}
 }

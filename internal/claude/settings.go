@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -389,6 +390,71 @@ func isLocalProxyBaseURL(v string) bool {
 func isManagedProxyToken(v string) bool {
 	s := strings.TrimSpace(v)
 	return s == "proxy-local" || strings.HasPrefix(s, "ccg::")
+}
+
+// GCResult holds the outcome of a snapshot garbage collection run.
+type GCResult struct {
+	Removed []string
+	Kept    []string
+	Errors  []error
+}
+
+// CollectSnapshots removes old snapshot files from snapshotDir, keeping the
+// most recent retain files plus any file whose absolute path appears in the
+// protected set. A retain value < 1 defaults to 5.
+func CollectSnapshots(snapshotDir string, retain int, protected map[string]bool) GCResult {
+	if retain < 1 {
+		retain = 5
+	}
+
+	var res GCResult
+
+	entries, err := os.ReadDir(snapshotDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return res
+		}
+		res.Errors = append(res.Errors, fmt.Errorf("read snapshot dir: %w", err))
+		return res
+	}
+
+	// Filter to .json files only.
+	type snapshotEntry struct {
+		path    string
+		modTime time.Time
+	}
+	var snapshots []snapshotEntry
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		p := filepath.Join(snapshotDir, e.Name())
+		info, err := e.Info()
+		if err != nil {
+			res.Errors = append(res.Errors, fmt.Errorf("stat %s: %w", e.Name(), err))
+			continue
+		}
+		snapshots = append(snapshots, snapshotEntry{path: p, modTime: info.ModTime()})
+	}
+
+	// Sort newest first.
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].modTime.After(snapshots[j].modTime)
+	})
+
+	for i, s := range snapshots {
+		if i < retain || protected[s.path] {
+			res.Kept = append(res.Kept, s.path)
+			continue
+		}
+		if err := os.Remove(s.path); err != nil {
+			res.Errors = append(res.Errors, fmt.Errorf("remove %s: %w", filepath.Base(s.path), err))
+			res.Kept = append(res.Kept, s.path)
+		} else {
+			res.Removed = append(res.Removed, s.path)
+		}
+	}
+	return res
 }
 
 func writeAtomic(path string, data []byte, mode os.FileMode) error {

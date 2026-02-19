@@ -18,6 +18,7 @@ import (
 	"ccgateway/internal/backend"
 	builtinbackend "ccgateway/internal/backend/builtin"
 	"ccgateway/internal/backends"
+	claude "ccgateway/internal/claude"
 	"ccgateway/internal/config"
 	"ccgateway/internal/control"
 	"ccgateway/internal/doctor"
@@ -950,7 +951,7 @@ func (a *application) cmdClaudeWithExpected(args []string, expected *expectedAct
 		fmt.Println(claudeUsage())
 		return nil
 	}
-	if sub != "apply" && sub != "revert" {
+	if sub != "apply" && sub != "revert" && sub != "snapshot-gc" {
 		return cberr.New(cberr.ErrInvalidArgs, claudeUsage())
 	}
 	fs := flag.NewFlagSet("claude", flag.ContinueOnError)
@@ -1077,6 +1078,12 @@ func (a *application) cmdClaudeWithExpected(args []string, expected *expectedAct
 		}
 		rt.Logger.Infof("claude apply complete scope=%s generation=%s", ref.ScopeID(), generation)
 		fmt.Printf("claude settings applied (%s)\n", ref.ScopeID())
+		// Best-effort snapshot GC after successful apply.
+		gcProtected := map[string]bool{rt.State.Claude.SnapshotPath: true}
+		gcRes := claude.CollectSnapshots(rt.Paths.SnapshotsDir, 5, gcProtected)
+		if len(gcRes.Removed) > 0 {
+			rt.Logger.Infof("snapshot gc: removed %d old snapshots", len(gcRes.Removed))
+		}
 		return nil
 	case "revert":
 		if !rt.State.Claude.Applied {
@@ -1110,6 +1117,17 @@ func (a *application) cmdClaudeWithExpected(args []string, expected *expectedAct
 		}
 		rt.Logger.Infof("claude revert complete scope=%s", ref.ScopeID())
 		fmt.Printf("claude settings reverted (%s)\n", ref.ScopeID())
+		return nil
+	case "snapshot-gc":
+		protected := map[string]bool{}
+		if rt.State.Claude.SnapshotPath != "" {
+			protected[rt.State.Claude.SnapshotPath] = true
+		}
+		res := claude.CollectSnapshots(rt.Paths.SnapshotsDir, 5, protected)
+		fmt.Printf("snapshot gc (%s): removed %d, kept %d\n", ref.ScopeID(), len(res.Removed), len(res.Kept))
+		for _, e := range res.Errors {
+			fmt.Fprintf(os.Stderr, "  warning: %v\n", e)
+		}
 		return nil
 	default:
 		return cberr.New(cberr.ErrInvalidArgs, claudeUsage())
@@ -3160,7 +3178,7 @@ func gatewayUsage() string {
 }
 
 func claudeUsage() string {
-	return "ccg claude <apply|revert> --vendor <v> --profile <p>"
+	return "ccg claude <apply|revert|snapshot-gc> --vendor <v> --profile <p>"
 }
 
 func doctorUsage() string {
