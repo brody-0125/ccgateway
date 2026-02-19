@@ -100,7 +100,7 @@ func (i *Installer) Install(opts InstallOptions) (InstallResult, error) {
 		return InstallResult{}, cberr.New(cberr.ErrDownloadFailed, "required release assets not found")
 	}
 
-	tmpDir, err := os.MkdirTemp("", "ccb-proxy-install-")
+	tmpDir, err := os.MkdirTemp("", "ccg-proxy-install-")
 	if err != nil {
 		return InstallResult{}, cberr.Wrap(cberr.ErrDownloadFailed, "failed to create temp dir", err)
 	}

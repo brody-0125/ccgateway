@@ -239,7 +239,7 @@ func proxyPlist(files AgentFiles) string {
 }
 
 func launchctlBin() string {
-	if v := os.Getenv("CCB_LAUNCHCTL_BIN"); v != "" {
+	if v := os.Getenv("CCG_LAUNCHCTL_BIN"); v != "" {
 		return v
 	}
 	return "launchctl"

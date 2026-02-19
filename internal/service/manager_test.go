@@ -76,7 +76,7 @@ func TestStatusWithStubSystemctl(t *testing.T) {
 	if err := os.WriteFile(stubPath, []byte(stubScript), 0o755); err != nil {
 		t.Fatalf("failed to write systemctl stub: %v", err)
 	}
-	t.Setenv("CCB_SYSTEMCTL_BIN", stubPath)
+	t.Setenv("CCG_SYSTEMCTL_BIN", stubPath)
 
 	mgr := NewManager()
 	status, err := mgr.Status("com.test.proxy", "com.test.sync")

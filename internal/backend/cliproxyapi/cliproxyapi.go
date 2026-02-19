@@ -32,7 +32,7 @@ func NewBundle() backend.Bundle {
 
 func (artifactInstaller) Install(_ context.Context, rt backend.Runtime, version string) (backend.ArtifactResult, error) {
 	installer := proxy.NewInstaller()
-	if v := os.Getenv("CCB_PROXY_API_BASE_URL"); v != "" {
+	if v := os.Getenv("CCG_PROXY_API_BASE_URL"); v != "" {
 		installer.RepoAPI = v
 	}
 	res, err := installer.Install(proxy.InstallOptions{

@@ -163,7 +163,7 @@ func systemdUserDir(homeDir string) string {
 }
 
 func systemctlBin() string {
-	if v := os.Getenv("CCB_SYSTEMCTL_BIN"); v != "" {
+	if v := os.Getenv("CCG_SYSTEMCTL_BIN"); v != "" {
 		return v
 	}
 	return "systemctl"

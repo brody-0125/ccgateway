@@ -42,7 +42,7 @@ func TestApplyNativeCleanupRemovesManagedLocalProxyRouting(t *testing.T) {
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, "settings.json")
 	snapDir := filepath.Join(dir, "snapshots")
-	original := []byte("{\n  \"model\": \"gpt-5.3-codex\",\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccb::codex::default::gen-1\",\n    \"ANTHROPIC_MODEL\": \"gpt-5.3-codex\",\n    \"ANTHROPIC_SMALL_FAST_MODEL\": \"gpt-5.3-codex\",\n    \"ANTHROPIC_DEFAULT_SONNET_MODEL\": \"gpt-5.3-codex\"\n  }\n}\n")
+	original := []byte("{\n  \"model\": \"gpt-5.3-codex\",\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccg::codex::default::gen-1\",\n    \"ANTHROPIC_MODEL\": \"gpt-5.3-codex\",\n    \"ANTHROPIC_SMALL_FAST_MODEL\": \"gpt-5.3-codex\",\n    \"ANTHROPIC_DEFAULT_SONNET_MODEL\": \"gpt-5.3-codex\"\n  }\n}\n")
 	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestApplyNativeDirectSetsModelAndClearsManagedProxyRouting(t *testing.T) {
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, "settings.json")
 	snapDir := filepath.Join(dir, "snapshots")
-	original := []byte("{\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccb::codex::default::gen-1\",\n    \"CUSTOM\": \"KEEP\"\n  }\n}\n")
+	original := []byte("{\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccg::codex::default::gen-1\",\n    \"CUSTOM\": \"KEEP\"\n  }\n}\n")
 	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}

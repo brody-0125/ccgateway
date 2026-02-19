@@ -2,30 +2,30 @@
 set -euo pipefail
 
 log() {
-  printf '[verify_ccb] %s\n' "$*"
+  printf '[verify_ccg] %s\n' "$*"
 }
 
 fail() {
-  printf '[verify_ccb] ERROR: %s\n' "$*" >&2
+  printf '[verify_ccg] ERROR: %s\n' "$*" >&2
   exit 1
 }
 
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/verify_ccb.sh [options]
+  scripts/verify_ccg.sh [options]
 
 Options:
-  --binary <path-or-name>      Binary to verify (default: ccb in PATH).
+  --binary <path-or-name>      Binary to verify (default: ccg in PATH).
   --checksums <file>           checksums.txt path for artifact verification.
   --artifact <file>            Artifact to verify. Repeatable.
   --skip-binary                Skip binary verification step.
   -h, --help                   Show this help.
 
 Examples:
-  scripts/verify_ccb.sh --binary /usr/local/bin/ccb
-  scripts/verify_ccb.sh --checksums ./dist/checksums.txt --artifact ./dist/ccgateway_0.1.0_darwin_arm64.tar.gz --skip-binary
-  scripts/verify_ccb.sh --checksums ./dist/checksums.txt --skip-binary
+  scripts/verify_ccg.sh --binary /usr/local/bin/ccg
+  scripts/verify_ccg.sh --checksums ./dist/checksums.txt --artifact ./dist/ccgateway_0.1.0_darwin_arm64.tar.gz --skip-binary
+  scripts/verify_ccg.sh --checksums ./dist/checksums.txt --skip-binary
 EOF
 }
 
@@ -111,7 +111,7 @@ verify_artifact() {
   log "checksum OK: ${base}"
 }
 
-BINARY="${CCB_BINARY:-ccb}"
+BINARY="${CCG_BINARY:-ccg}"
 CHECKSUMS=""
 SKIP_BINARY=0
 ARTIFACTS=()

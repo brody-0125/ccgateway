@@ -287,7 +287,7 @@ func isLocalProxyBaseURL(v string) bool {
 
 func isManagedProxyToken(v string) bool {
 	s := strings.TrimSpace(v)
-	return s == "proxy-local" || strings.HasPrefix(s, "ccb::")
+	return s == "proxy-local" || strings.HasPrefix(s, "ccg::")
 }
 
 func writeAtomic(path string, data []byte, mode os.FileMode) error {

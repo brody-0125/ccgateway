@@ -14,8 +14,8 @@ All notable changes to this project are documented in this file.
   - expected-active guard enforcement in `use`
   - `model switch` concurrent active change rollback safety
   - `failover` concurrent source-active change rollback safety
-- `ccb preflight --from <scope> --to <scope> [--model <name>] [--json]` transition gate command to classify blocking checks vs advisory warnings before failover.
-- `ccb handoff create --from <scope> --to <scope> [--model <name>] [--output <path>] [--json]` bundle command for operator/agent transfer with recommended `preflight -> failover -> doctor` sequence.
+- `ccg preflight --from <scope> --to <scope> [--model <name>] [--json]` transition gate command to classify blocking checks vs advisory warnings before failover.
+- `ccg handoff create --from <scope> --to <scope> [--model <name>] [--output <path>] [--json]` bundle command for operator/agent transfer with recommended `preflight -> failover -> doctor` sequence.
 - CLI tests for preflight and handoff bundle generation.
 
 ### Changed
@@ -40,10 +40,10 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- `ccb service reconcile --vendor <v> --profile <p>` command for one-shot service recovery (`install -> start`) after partial launchd/runtime failures.
-- `ccb setup --interactive` guided prompts for vendor/profile/runtime/model/settings-layer/backend selection.
-- `ccb status --json` machine-readable status output for automation and trust checks.
-- `ccb doctor --verbose` detailed diagnostics/history mode.
+- `ccg service reconcile --vendor <v> --profile <p>` command for one-shot service recovery (`install -> start`) after partial launchd/runtime failures.
+- `ccg setup --interactive` guided prompts for vendor/profile/runtime/model/settings-layer/backend selection.
+- `ccg status --json` machine-readable status output for automation and trust checks.
+- `ccg doctor --verbose` detailed diagnostics/history mode.
 - Codex policy guard evaluation package (`internal/policy`) with strict enforcement and policy diagnostics.
 - Doctor checks now include `policy guard` and `model proof`.
 - New cross-vendor roundtrip regression coverage (`codex -> claude -> codex`) in CLI tests.
@@ -72,7 +72,7 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - `setup` now accepts `--settings-layer user|project|local` and `--settings-path <path>` so project isolation can be configured in one-shot flow without separate `bootstrap`.
-- Added `doctor` settings-target validation for scope/cwd drift (`settings_layer=project|local` with mismatched `settings_path`) and surfaced the same check in `ccb status`.
+- Added `doctor` settings-target validation for scope/cwd drift (`settings_layer=project|local` with mismatched `settings_path`) and surfaced the same check in `ccg status`.
 - `claude apply` and `use` now hard-fail on project/local settings binding drift to prevent accidental cross-project settings mutation when the same scope is invoked from a different cwd.
 - `proxy install --version` and setup proxy version inputs now accept both `vX.Y.Z` and `X.Y.Z` tags (while still supporting `latest`), reducing release-tag input failures.
 
@@ -82,7 +82,7 @@ All notable changes to this project are documented in this file.
 
 - Default Claude settings target for new scopes is now project-local (`settings_layer=project`, `<cwd>/.claude/settings.json`) to prevent proxy routing from leaking into other local projects/sessions.
 - `bootstrap --settings-layer <layer>` now re-resolves default `settings_path` automatically when `--settings-path` is omitted, so legacy user-layer scopes can migrate cleanly to project isolation.
-- `scripts/install_ccb.sh --source` now resolves its default source directory from the script's repository root (not caller `pwd`), so absolute-path invocation from other project directories no longer fails with `go: cannot find main module`.
+- `scripts/install_ccg.sh --source` now resolves its default source directory from the script's repository root (not caller `pwd`), so absolute-path invocation from other project directories no longer fails with `go: cannot find main module`.
 
 ## [0.2.0] - 2026-02-15
 
@@ -90,10 +90,10 @@ All notable changes to this project are documented in this file.
 
 - Model normalization utility for vendor-aware canonicalization (`internal/model/normalize.go`).
 - `setup --model` support for one-shot setup model selection.
-- `ccb model switch --vendor <v> --profile <p> --model <name>` one-shot model transition command (active-scope-only, service running guarantee, doctor validation).
+- `ccg model switch --vendor <v> --profile <p> --model <name>` one-shot model transition command (active-scope-only, service running guarantee, doctor validation).
 - Runtime mode split with explicit `native-cleanup` and `native-direct` semantics.
 - New `claude` provider bundle and vendor-scoped direct path support.
-- `ccb failover --from <vendor:profile> --to <vendor:profile> --model <name>` one-shot cross-scope failover transaction.
+- `ccg failover --from <vendor:profile> --to <vendor:profile> --model <name>` one-shot cross-scope failover transaction.
 - Integration coverage for Codex fallback scenario (`codex:default -> claude:default`) with active generation/state/settings verification.
 
 ### Fixed
@@ -108,10 +108,10 @@ All notable changes to this project are documented in this file.
 - `doctor` now differentiates `native-cleanup` and `native-direct` checks/route-proof to avoid false positives in direct vendor mode.
 - `failover` rollback now calls provider-level `Claude.Revert` instead of bypassing provider abstractions, preserving multi-vendor extension safety.
 - `failover` now restores target scope config/state when target bootstrap fails, preventing partial target-scope drift on bootstrap-time failures.
-- `ccb status` now surfaces `tool-call integrity` alongside route proof for faster user-visible diagnosis.
+- `ccg status` now surfaces `tool-call integrity` alongside route proof for faster user-visible diagnosis.
 - `model switch` now fails fast with `ERR_INVALID_CONFIG` when proxy binary is missing, with direct recovery commands, instead of entering transaction rollback and surfacing noisy secondary launchctl errors.
 - `model switch` rollback compensation now skips `service start` when rollback `service install` fails, reducing cascading error noise.
-- CLI help detection now accepts `-help` in addition to `-h/--help/help` (e.g., `ccb model -help`).
+- CLI help detection now accepts `-help` in addition to `-h/--help/help` (e.g., `ccg model -help`).
 
 ## [0.1.0] - 2026-02-14
 
@@ -120,9 +120,9 @@ All notable changes to this project are documented in this file.
 - Scoped vendor/profile architecture and active scope switching model.
 - Agent-first install and verification scripts.
 - GitHub Release workflow for darwin `amd64/arm64` artifacts with `checksums.txt`.
-- `ccb setup` one-shot command for end-to-end scoped setup (`bootstrap -> proxy/auth/service -> claude apply -> doctor`).
+- `ccg setup` one-shot command for end-to-end scoped setup (`bootstrap -> proxy/auth/service -> claude apply -> doctor`).
 - Backend abstraction layer (`internal/backend`) and default backend registry (`cliproxyapi`) with provider/backend separation.
-- Experimental `builtin` backend with `ccb gateway serve --config <path>` runtime entrypoint.
+- Experimental `builtin` backend with `ccg gateway serve --config <path>` runtime entrypoint.
 
 ### Fixed
 
@@ -134,12 +134,12 @@ All notable changes to this project are documented in this file.
 - `claude apply` in `runtime_mode=native` now removes ccgateway-managed proxy/model overrides instead of writing model settings.
 - `claude apply` now updates active generation atomically with scope state when the target scope is currently active.
 - `doctor` now performs mode-aware checks and prints direct recovery hints for missing proxy binary installs.
-- `ccb service start` rollback on post-start healthcheck failure.
+- `ccg service start` rollback on post-start healthcheck failure.
 - Strict policy enforcement for mutating service commands (`--active` disallowed).
 - Rejection of unexpected trailing positional arguments across CLI commands.
 - `uninstall --purge` global port/active metadata updates under switch lock.
-- Semantic-version archive selection for `install_ccb.sh --from-dist --version latest`.
-- `verify_ccb.sh` artifact scope limited to `checksums.txt` entries.
+- Semantic-version archive selection for `install_ccg.sh --from-dist --version latest`.
+- `verify_ccg.sh` artifact scope limited to `checksums.txt` entries.
 - Active-generation guard to block unsafe cross-scope Claude revert/uninstall restores.
 - Legacy active-pointer paths now require scope identity for settings mutation (prevents cross-scope revert when generation is empty).
 - `service start/status` now hard-fail with capability error when backend health capability is missing.
@@ -168,7 +168,7 @@ All notable changes to this project are documented in this file.
 - `setup` now suppresses redundant nested `bootstrap complete` output and auto-retries one-shot service-start failures (`Could not find service` / `connection refused`) via `service install -> service start`.
 - `doctor` now supports `--clear-error-history`; report output relabels historical errors as non-blocking history with a clear-history hint.
 - `doctor` now includes a `route proof` check so users can verify whether traffic is actually pinned to `claude -> local proxy -> backend/model` (gateway) or flowing through native Claude vendor path.
-- Added top-level `ccb status` (alias `ccb ccb-status`) to show trust-focused runtime status (`route proof`) plus local proxy usage summary (`total/chat/count_tokens`, top paths) for the selected scope.
+- Added top-level `ccg status` (alias `ccg ccg-status`) to show trust-focused runtime status (`route proof`) plus local proxy usage summary (`total/chat/count_tokens`, top paths) for the selected scope.
 
 ### Changed
 

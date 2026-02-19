@@ -13,8 +13,8 @@ import (
 
 func TestCodexToClaudeFailoverIntegration(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("CCB_HOME", home)
-	t.Setenv("CCB_CWD", home)
+	t.Setenv("CCG_HOME", home)
+	t.Setenv("CCG_CWD", home)
 
 	run := func(args ...string) {
 		t.Helper()

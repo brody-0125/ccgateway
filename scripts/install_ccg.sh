@@ -5,21 +5,21 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 
 log() {
-  printf '[install_ccb] %s\n' "$*"
+  printf '[install_ccg] %s\n' "$*"
 }
 
 fail() {
-  printf '[install_ccb] ERROR: %s\n' "$*" >&2
+  printf '[install_ccg] ERROR: %s\n' "$*" >&2
   exit 1
 }
 
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/install_ccb.sh [options]
+  scripts/install_ccg.sh [options]
 
 Options:
-  --source                     Build and install from local source (./cmd/ccb).
+  --source                     Build and install from local source (./cmd/ccg).
   --source-dir <path>          Source directory for --source mode (default: repo root).
   --repo <owner/repo>          GitHub repo for release install mode.
   --version <tag|latest>       Release tag (vX.Y.Z) or latest (default: latest).
@@ -30,9 +30,9 @@ Options:
   -h, --help                   Show this help.
 
 Examples:
-  scripts/install_ccb.sh --source --install-dir "$HOME/.local/bin"
-  scripts/install_ccb.sh --repo owner/repo --version latest --install-dir "$HOME/.local/bin"
-  scripts/install_ccb.sh --from-dist ./dist --version latest --install-dir /usr/local/bin
+  scripts/install_ccg.sh --source --install-dir "$HOME/.local/bin"
+  scripts/install_ccg.sh --repo owner/repo --version latest --install-dir "$HOME/.local/bin"
+  scripts/install_ccg.sh --from-dist ./dist --version latest --install-dir /usr/local/bin
 EOF
 }
 
@@ -151,7 +151,7 @@ checksum_for_artifact() {
 install_binary() {
   local src="$1"
   local install_dir="$2"
-  local target="${install_dir}/ccb"
+  local target="${install_dir}/ccg"
 
   if [[ ! -d "$install_dir" ]]; then
     if mkdir -p "$install_dir" 2>/dev/null; then
@@ -204,10 +204,10 @@ resolve_tag() {
 
 MODE="release"
 SOURCE_DIR="$REPO_ROOT"
-REPO="${CCB_GITHUB_REPO:-}"
+REPO="${CCG_GITHUB_REPO:-}"
 VERSION="latest"
 FROM_DIST=""
-INSTALL_DIR="${CCB_INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${CCG_INSTALL_DIR:-/usr/local/bin}"
 ARCH="auto"
 NO_SUDO=0
 
@@ -283,13 +283,13 @@ case "$MODE" in
   source)
     command -v go >/dev/null 2>&1 || fail "go command not found"
     [[ -f "${SOURCE_DIR}/go.mod" ]] || fail "go.mod not found in source dir: ${SOURCE_DIR} (set --source-dir <path>)"
-    [[ -d "${SOURCE_DIR}/cmd/ccb" ]] || fail "cmd/ccb not found in source dir: ${SOURCE_DIR} (set --source-dir <path>)"
+    [[ -d "${SOURCE_DIR}/cmd/ccg" ]] || fail "cmd/ccg not found in source dir: ${SOURCE_DIR} (set --source-dir <path>)"
     log "building from source: ${SOURCE_DIR}"
     (
       cd "$SOURCE_DIR"
-      go build -trimpath -ldflags="-s -w" -o "${TMP_DIR}/ccb" ./cmd/ccb
+      go build -trimpath -ldflags="-s -w" -o "${TMP_DIR}/ccg" ./cmd/ccg
     )
-    install_binary "${TMP_DIR}/ccb" "$INSTALL_DIR"
+    install_binary "${TMP_DIR}/ccg" "$INSTALL_DIR"
     ;;
   dist)
     [[ -n "$FROM_DIST" ]] || fail "--from-dist path is required in dist mode"
@@ -314,8 +314,8 @@ case "$MODE" in
     [[ "$EXPECTED_SHA" == "$ACTUAL_SHA" ]] || fail "checksum mismatch for ${ARCHIVE_NAME}"
 
     tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR"
-    [[ -x "${TMP_DIR}/ccb" ]] || fail "archive does not contain executable ccb"
-    install_binary "${TMP_DIR}/ccb" "$INSTALL_DIR"
+    [[ -x "${TMP_DIR}/ccg" ]] || fail "archive does not contain executable ccg"
+    install_binary "${TMP_DIR}/ccg" "$INSTALL_DIR"
     ;;
   release)
     command -v curl >/dev/null 2>&1 || fail "curl command not found"
@@ -340,8 +340,8 @@ case "$MODE" in
     [[ "$EXPECTED_SHA" == "$ACTUAL_SHA" ]] || fail "checksum mismatch for ${ARCHIVE_NAME}"
 
     tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR"
-    [[ -x "${TMP_DIR}/ccb" ]] || fail "archive does not contain executable ccb"
-    install_binary "${TMP_DIR}/ccb" "$INSTALL_DIR"
+    [[ -x "${TMP_DIR}/ccg" ]] || fail "archive does not contain executable ccg"
+    install_binary "${TMP_DIR}/ccg" "$INSTALL_DIR"
     ;;
   *)
     fail "unsupported mode: ${MODE}"
@@ -349,4 +349,4 @@ case "$MODE" in
 esac
 
 log "done"
-log "run: scripts/verify_ccb.sh --binary ${INSTALL_DIR}/ccb"
+log "run: scripts/verify_ccg.sh --binary ${INSTALL_DIR}/ccg"

@@ -59,11 +59,11 @@ func TestReportRenderIncludesTopRecoveryHint(t *testing.T) {
 	report := Report{
 		Checks: []CheckResult{
 			{Name: "a", OK: true, Detail: "ok"},
-			{Name: "b", OK: false, Detail: "missing proxy; run: ccb service reconcile --vendor codex --profile default"},
+			{Name: "b", OK: false, Detail: "missing proxy; run: ccg service reconcile --vendor codex --profile default"},
 		},
 	}
 	rendered := report.Render()
-	if !strings.Contains(rendered, "Top recovery: ccb service reconcile --vendor codex --profile default") {
+	if !strings.Contains(rendered, "Top recovery: ccg service reconcile --vendor codex --profile default") {
 		t.Fatalf("expected top recovery hint in render, got:\n%s", rendered)
 	}
 }
@@ -101,7 +101,7 @@ func TestRunScopedGatewayMissingProxyShowsInstallHint(t *testing.T) {
 	if proxyCheck.OK {
 		t.Fatalf("expected proxy check failure, got: %+v", proxyCheck)
 	}
-	if !strings.Contains(proxyCheck.Detail, "ccb proxy install --vendor codex --profile default") {
+	if !strings.Contains(proxyCheck.Detail, "ccg proxy install --vendor codex --profile default") {
 		t.Fatalf("expected install hint, got: %s", proxyCheck.Detail)
 	}
 }
@@ -222,7 +222,7 @@ func TestRunScopedGatewayRejectsClaudeSelectorModel(t *testing.T) {
 	if modelCheck.OK {
 		t.Fatalf("expected model policy failure, got: %+v", modelCheck)
 	}
-	if !strings.Contains(modelCheck.Detail, "ccb failover") {
+	if !strings.Contains(modelCheck.Detail, "ccg failover") {
 		t.Fatalf("expected failover hint, got: %s", modelCheck.Detail)
 	}
 }
@@ -241,7 +241,7 @@ func TestRunScopedNativeDetectsLocalProxySettingLeak(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cfg.SettingsPath), 0o755); err != nil {
 		t.Fatalf("mkdir settings dir failed: %v", err)
 	}
-	leaked := []byte("{\"env\":{\"ANTHROPIC_BASE_URL\":\"http://127.0.0.1:8317\",\"ANTHROPIC_AUTH_TOKEN\":\"ccb::codex::default::gen-1\"}}\n")
+	leaked := []byte("{\"env\":{\"ANTHROPIC_BASE_URL\":\"http://127.0.0.1:8317\",\"ANTHROPIC_AUTH_TOKEN\":\"ccg::codex::default::gen-1\"}}\n")
 	if err := os.WriteFile(cfg.SettingsPath, leaked, 0o600); err != nil {
 		t.Fatalf("write leaked settings failed: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestRunScopedNativeDetectsLocalProxySettingLeak(t *testing.T) {
 	if nativeCheck.OK {
 		t.Fatalf("expected native settings failure, got: %+v", nativeCheck)
 	}
-	if !strings.Contains(nativeCheck.Detail, "ccb claude apply --vendor codex --profile default") {
+	if !strings.Contains(nativeCheck.Detail, "ccg claude apply --vendor codex --profile default") {
 		t.Fatalf("expected remediation hint, got: %s", nativeCheck.Detail)
 	}
 }
@@ -312,7 +312,7 @@ func TestRunScopedNativeDetectsModelOverrideLeak(t *testing.T) {
 	if nativeCheck.OK {
 		t.Fatalf("expected native settings failure, got: %+v", nativeCheck)
 	}
-	if !strings.Contains(nativeCheck.Detail, "ccb claude apply --vendor codex --profile default") {
+	if !strings.Contains(nativeCheck.Detail, "ccg claude apply --vendor codex --profile default") {
 		t.Fatalf("expected remediation hint, got: %s", nativeCheck.Detail)
 	}
 }
@@ -483,7 +483,7 @@ func TestRunScopedGatewayRouteProofPassesWhenSettingsApplied(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cfg.SettingsPath), 0o755); err != nil {
 		t.Fatalf("mkdir settings dir failed: %v", err)
 	}
-	body := []byte("{\"model\":\"gpt-5.3-codex\",\"env\":{\"ANTHROPIC_BASE_URL\":\"http://127.0.0.1:8317\",\"ANTHROPIC_AUTH_TOKEN\":\"ccb::codex::default::gen-1\"}}\n")
+	body := []byte("{\"model\":\"gpt-5.3-codex\",\"env\":{\"ANTHROPIC_BASE_URL\":\"http://127.0.0.1:8317\",\"ANTHROPIC_AUTH_TOKEN\":\"ccg::codex::default::gen-1\"}}\n")
 	if err := os.WriteFile(cfg.SettingsPath, body, 0o600); err != nil {
 		t.Fatalf("write settings failed: %v", err)
 	}
@@ -562,7 +562,7 @@ func TestRunScopedGatewayRouteProofFailsWhenSettingsNotApplied(t *testing.T) {
 	if routeCheck.OK {
 		t.Fatalf("expected route proof failure when settings not applied, got: %+v", routeCheck)
 	}
-	if !strings.Contains(routeCheck.Detail, "ccb claude apply --vendor codex --profile default") {
+	if !strings.Contains(routeCheck.Detail, "ccg claude apply --vendor codex --profile default") {
 		t.Fatalf("expected remediation hint in route proof detail, got: %s", routeCheck.Detail)
 	}
 }
@@ -813,7 +813,7 @@ func TestToolCallIntegrityCheckDetectsMalformedToolTraffic(t *testing.T) {
 	if !strings.Contains(check.Detail, "malformed/unstable proxy tool traffic") {
 		t.Fatalf("expected malformed traffic hint, got: %s", check.Detail)
 	}
-	if !strings.Contains(check.Detail, "ccb model switch --vendor codex --profile default --model gpt-5.3-codex") {
+	if !strings.Contains(check.Detail, "ccg model switch --vendor codex --profile default --model gpt-5.3-codex") {
 		t.Fatalf("expected codex fallback remediation hint, got: %s", check.Detail)
 	}
 }

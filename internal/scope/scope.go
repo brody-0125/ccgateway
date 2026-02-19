@@ -82,7 +82,7 @@ func (r Ref) LabelBase(username string) string {
 	if u == "" {
 		u = fmt.Sprintf("uid%d", os.Getuid())
 	}
-	return fmt.Sprintf("com.%s.ccb.%s.%s", u, r.VendorID, r.ProfileID)
+	return fmt.Sprintf("com.%s.ccg.%s.%s", u, r.VendorID, r.ProfileID)
 }
 
 func (r Ref) Labels(username string) (proxyLabel, syncLabel string) {

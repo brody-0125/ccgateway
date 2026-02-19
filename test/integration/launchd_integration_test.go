@@ -14,12 +14,12 @@ func TestLaunchdManagerWithStub(t *testing.T) {
 	dir := t.TempDir()
 	logFile := filepath.Join(dir, "launchctl.log")
 	stub := filepath.Join(dir, "launchctl")
-	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$@\" >> \"$CCB_TEST_LAUNCHCTL_LOG\"\nexit 0\n"
+	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$@\" >> \"$CCG_TEST_LAUNCHCTL_LOG\"\nexit 0\n"
 	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatalf("failed to write stub: %v", err)
 	}
-	t.Setenv("CCB_TEST_LAUNCHCTL_LOG", logFile)
-	t.Setenv("CCB_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_TEST_LAUNCHCTL_LOG", logFile)
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
 	mgr := launchd.NewManager()
 	files := launchd.AgentFiles{
@@ -38,7 +38,7 @@ func TestLaunchdManagerWithStub(t *testing.T) {
 	if err := os.WriteFile(files.AuthSource, []byte("{}"), 0o644); err != nil {
 		t.Fatalf("write auth source: %v", err)
 	}
-	if err := proxy.WriteSyncScript(files.SyncScript, "/usr/local/bin/ccb", "codex", "default"); err != nil {
+	if err := proxy.WriteSyncScript(files.SyncScript, "/usr/local/bin/ccg", "codex", "default"); err != nil {
 		t.Fatalf("write sync script: %v", err)
 	}
 	if err := proxy.WriteProxyConfig(files.ProxyConfig, 12345, filepath.Join(dir, "auths"), "gpt-5.3-codex"); err != nil {
