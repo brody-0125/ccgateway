@@ -50,7 +50,7 @@ flowchart TD
 
 - **macOS** (darwin `arm64` or `amd64`) **or Linux** (`amd64` or `arm64`)
 - Claude Code installed
-- Codex auth file available at `~/.codex/auth.json` (gateway mode); native cleanup mode does not require auth sync/source
+- Codex auth file available at `~/.codex/auth.json` (gateway mode); native cleanup mode does not require auth sync/source (custom path via `--auth-source`)
 
 **Linux-specific prerequisites:**
 
@@ -104,7 +104,7 @@ If you only need native cleanup transition:
 ccb setup --vendor codex --profile default --runtime-mode native-cleanup
 ```
 
-Native cleanup setup also removes existing scope launch agents (`proxy`/`sync`) before applying cleanup settings.
+Native cleanup setup also removes existing scope service agents (macOS: launchd, Linux: systemd) (`proxy`/`sync`) before applying cleanup settings.
 For Codex, model aliases are normalized (`codex` -> `gpt-5.3-codex`, `codex-spark`/`spark` -> `gpt-5.3-codex-spark`).
 
 Direct Claude scope setup (no local proxy route):
