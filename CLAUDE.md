@@ -12,41 +12,219 @@ This repository provides a deterministic install/verify flow for agents.
 6. After upgrading `ccb`, re-run `service install` for the target scope before `service start` so proxy config/plists are regenerated.
 7. `setup` may auto-retry `service install -> service start` once for known service-manager failures (launchctl on macOS, systemctl on Linux) and connection-refused signatures; if it still fails, use the recovery block below.
 
-## Local development install
+## Initial install and setup guide
+
+### 1) Prerequisites
+
+- **macOS** (darwin `arm64` or `amd64`) **or Linux** (`amd64` or `arm64`)
+- Claude Code installed
+- Codex auth file available at `~/.codex/auth.json` (gateway mode); native cleanup mode does not require auth sync/source (custom path via `--auth-source`)
+
+**Linux-specific prerequisites:**
+
+- `systemd` (user session support required)
+- `loginctl enable-linger <user>` — enables user services to run without an active login session
+- `XDG_RUNTIME_DIR` set (typically `/run/user/$(id -u)`; auto-set on most systemd distros)
+
+### 2) Install `ccb`
+
+Recommended (agent-safe, deterministic):
 
 ```bash
 ./scripts/install_ccb.sh --source --install-dir "$HOME/.local/bin"
-./scripts/verify_ccb.sh --binary "$HOME/.local/bin/ccb"
+export PATH="$HOME/.local/bin:$PATH"
+scripts/verify_ccb.sh --binary "$HOME/.local/bin/ccb"
 ```
 
-`install_ccb.sh --source` defaults to the script repository root, so absolute-path invocation from another `cwd` is supported.
+`--source` mode builds from this repository root by default, so it still works when invoked via absolute script path from another working directory.
 
-## GitHub Release install
+Or install from GitHub Release:
 
 ```bash
 ./scripts/install_ccb.sh --repo <owner>/<repo> --version latest --install-dir "$HOME/.local/bin"
-./scripts/verify_ccb.sh --binary "$HOME/.local/bin/ccb"
+export PATH="$HOME/.local/bin:$PATH"
+scripts/verify_ccb.sh --binary "$HOME/.local/bin/ccb"
 ```
 
-## Artifact checksum verification only
+If you need `/usr/local/bin`:
+
+```bash
+sudo ./scripts/install_ccb.sh --repo <owner>/<repo> --version latest --install-dir /usr/local/bin
+scripts/verify_ccb.sh --binary /usr/local/bin/ccb
+```
+
+Artifact checksum verification only (CI/release, no binary install):
 
 ```bash
 ./scripts/verify_ccb.sh --checksums ./dist/checksums.txt --skip-binary
 ```
 
-## Notes
+### 3) One-shot setup (recommended)
 
-- The project supports macOS and Linux for install/runtime operations.
-- macOS uses `launchd` (launchctl) for service management; Linux uses `systemd` (systemctl --user) with user linger enabled.
-- If `/usr/local/bin` is used and not writable, `install_ccb.sh` may require `sudo`.
+```bash
+ccb setup --vendor codex --profile default
+ccb setup --vendor codex --profile default --gateway-backend cliproxyapi
+ccb setup --vendor codex --profile default --gateway-backend cliproxyapi --settings-layer project
+ccb setup --vendor codex --profile default --gateway-backend cliproxyapi --model gpt-5.3-codex-spark
+ccb setup --interactive
+# experimental (health-oriented) backend; not for full LLM routing
+ccb setup --vendor codex --profile default --gateway-backend builtin
+```
 
-### Linux-specific agent prerequisites
+This runs `bootstrap -> proxy install -> auth sync -> service install/start -> claude apply -> doctor`.
+If you only need native cleanup transition:
 
-Before running install/setup on Linux, the agent should verify:
+```bash
+ccb setup --vendor codex --profile default --runtime-mode native-cleanup
+```
 
-1. `systemd` is available (`systemctl --user` must work).
-2. User linger is enabled: `loginctl enable-linger "$(whoami)"`.
-3. `XDG_RUNTIME_DIR` is set (typically `/run/user/$(id -u)`).
+Native cleanup setup also removes existing scope service agents (macOS: launchd, Linux: systemd) (`proxy`/`sync`) before applying cleanup settings.
+For Codex, model aliases are normalized (`codex` -> `gpt-5.3-codex`, `codex-spark`/`spark` -> `gpt-5.3-codex-spark`).
+
+Direct Claude scope setup (no local proxy route):
+
+```bash
+ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-sonnet-4-6
+# or for max intelligence
+ccb setup --vendor claude --profile default --runtime-mode native-direct --model claude-opus-4-6
+```
+
+If you upgraded `ccb` binary, run `ccb service install --vendor codex --profile default` once to regenerate service config (launchd plist on macOS, systemd unit on Linux) before `service start`.
+
+### 4) Bootstrap a scope (manual path)
+
+```bash
+ccb bootstrap --vendor codex --profile default
+```
+
+Default behavior: `ccb` isolates Claude routing per project by writing to `<cwd>/.claude/settings.json` (`settings_layer=project`), so other local projects/sessions keep their original Claude path.
+
+If an existing scope was created with old user-layer defaults, migrate once:
+
+```bash
+ccb bootstrap --vendor codex --profile default --settings-layer project
+ccb claude apply --vendor codex --profile default
+```
+
+If the same `vendor/profile` is reused from a different project cwd, `setup`/`claude apply`/`use` can now fail with `settings_layer=project mismatch` to prevent cross-project settings writes. Rebind explicitly:
+
+```bash
+ccb setup --vendor codex --profile <profile> --settings-layer project
+```
+
+### 5) Install runtime dependencies for the scope
+
+`gateway` mode (uses local proxy / CLIProxyAPI):
+
+```bash
+ccb proxy install --vendor codex --profile default --version latest
+ccb auth sync --vendor codex --profile default
+ccb service install --vendor codex --profile default
+ccb service start --vendor codex --profile default
+ccb service reconcile --vendor codex --profile default
+```
+
+`--version` accepts both `vX.Y.Z` and `X.Y.Z` (`latest` also supported).
+
+`native-cleanup` mode (cleanup-only transition path from gateway):
+
+```bash
+ccb bootstrap --vendor codex --profile default --runtime-mode native-cleanup
+ccb claude apply --vendor codex --profile default
+ccb doctor --vendor codex --profile default
+```
+
+### 6) Apply Claude settings explicitly
+
+```bash
+ccb claude apply --vendor codex --profile default
+```
+
+No automatic settings mutation occurs before this command.
+In `native-cleanup` mode, `claude apply` removes ccgateway-managed proxy/model override keys from Claude settings.
+
+### 7) Validate health and status
+
+```bash
+ccb service status --vendor codex --profile default
+ccb doctor --vendor codex --profile default
+ccb status --vendor codex --profile default --json
+```
+
+### 8) Switch active scope (optional)
+
+```bash
+ccb use --vendor codex --profile default
+ccb service status --active
+ccb doctor --active
+```
+
+### 9) Switch model after install (active scope only)
+
+```bash
+ccb model switch --vendor codex --profile default --model codex-spark
+# equivalent canonical form
+ccb model switch --vendor codex --profile default --model gpt-5.3-codex-spark
+ccb status --vendor codex --profile default
+ccb doctor --vendor codex --profile default
+```
+
+`model switch` runs one-shot transition: `config update -> service install/start -> claude apply -> doctor`.
+It now enforces active-scope expectation at apply time and verifies active generation at transaction tail to prevent concurrent-switch commit races.
+The target scope must be the current active scope, and successful switch keeps the service running.
+For `vendor=codex`, Claude selector models (`claude-*`, `opus`, `sonnet`, `haiku`) are rejected by policy.
+`model switch` expects proxy artifact already installed for the target scope (`setup` or `proxy install`).
+
+Codex quota/token exhaustion fallback (current supported path):
+
+```bash
+# disable gateway routing and clean ccgateway-managed Claude overrides
+ccb setup --vendor codex --profile default --runtime-mode native-cleanup
+ccb doctor --vendor codex --profile default
+```
+
+After native cleanup, select/use Claude-native model (for example `claude-sonnet-4-6` or `claude-opus-4-6`) directly in Claude Code path.
+
+### 10) Cross-vendor failover (one-shot)
+
+```bash
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb failover --from codex:default --to claude:default --model claude-sonnet-4-6
+# or --model claude-opus-4-6 for max intelligence
+```
+
+`failover` applies a transactional scope switch: target bootstrap/update (uses target scope runtime mode) -> target runtime prep (gateway only) -> active switch -> doctor validation -> rollback on failure.
+For existing target scopes, settings binding/policy validation now runs before mutation; if binding is mismatched, failover is blocked without changing target config/state.
+`failover` switch stage also validates the source active snapshot at switch time; if source active changed concurrently, failover aborts and rolls back without clobbering external active changes.
+
+### 11) Context-gap preflight and handoff bundle
+
+`preflight` is a failover gate that distinguishes:
+
+- blocking checks (must pass before failover)
+- warnings (advisory signals like route/tool integrity)
+
+```bash
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6
+ccb preflight --from codex:default --to claude:default --model claude-sonnet-4-6 --json
+```
+
+For multi-agent/operator handoff, generate a ready-to-run bundle:
+
+```bash
+ccb handoff create --from codex:default --to claude:default --model claude-sonnet-4-6 --output /tmp/ccb-handoff.md
+```
+
+`handoff create` does not mutate scopes/services. It packages preflight checks and next commands (`preflight -> failover -> doctor`) into markdown or JSON.
+
+### 12) Revert and uninstall (optional)
+
+```bash
+ccb claude revert --vendor codex --profile default
+ccb uninstall --vendor codex --profile default
+# full cleanup
+ccb uninstall --vendor codex --profile default --purge
+```
 
 ## Agent-first interactive setup (no manual step-by-step)
 
