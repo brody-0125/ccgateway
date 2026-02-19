@@ -1,5 +1,9 @@
 # Binaries
 /ccg
+/ccg-test-bin
+
+# IDE
+.idea/
 
 # macOS
 .DS_Store

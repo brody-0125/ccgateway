@@ -23,17 +23,17 @@ type ServiceStatus struct {
 }
 
 type AgentFiles struct {
-	ProxyPlistPath string
-	SyncPlistPath  string
-	ProxyBinary    string
-	ProxyConfig    string
-	ProxyLog       string
-	SyncLog        string
-	SyncScript     string
-	AuthSource     string
-	HomeDir        string
-	ProxyLabel     string
-	SyncLabel      string
+	ProxyUnitPath string
+	SyncUnitPath  string
+	ProxyBinary   string
+	ProxyConfig   string
+	ProxyLog      string
+	SyncLog       string
+	SyncScript    string
+	AuthSource    string
+	HomeDir       string
+	ProxyLabel    string
+	SyncLabel     string
 }
 
 func NewManager() *Manager {
@@ -53,13 +53,13 @@ func (m *Manager) InstallAgents(files AgentFiles) error {
 	cleanupOnFailure := func(cause error) error {
 		return m.cleanupInstallFailure(files, cause)
 	}
-	if err := os.MkdirAll(filepath.Dir(files.ProxyPlistPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(files.ProxyUnitPath), 0o755); err != nil {
 		return err
 	}
-	if err := writeAtomic(files.SyncPlistPath, []byte(syncPlist(files)), 0o644); err != nil {
+	if err := writeAtomic(files.SyncUnitPath, []byte(syncPlist(files)), 0o644); err != nil {
 		return cleanupOnFailure(fmt.Errorf("failed to write sync plist: %w", err))
 	}
-	if err := writeAtomic(files.ProxyPlistPath, []byte(proxyPlist(files)), 0o644); err != nil {
+	if err := writeAtomic(files.ProxyUnitPath, []byte(proxyPlist(files)), 0o644); err != nil {
 		return cleanupOnFailure(fmt.Errorf("failed to write proxy plist: %w", err))
 	}
 	if err := m.Bootout(files.ProxyLabel); err != nil && !containsNotLoaded(err.Error()) {
@@ -68,10 +68,10 @@ func (m *Manager) InstallAgents(files AgentFiles) error {
 	if err := m.Bootout(files.SyncLabel); err != nil && !containsNotLoaded(err.Error()) {
 		return cleanupOnFailure(err)
 	}
-	if err := m.Bootstrap(files.SyncPlistPath); err != nil {
+	if err := m.Bootstrap(files.SyncUnitPath); err != nil {
 		return cleanupOnFailure(err)
 	}
-	if err := m.Bootstrap(files.ProxyPlistPath); err != nil {
+	if err := m.Bootstrap(files.ProxyUnitPath); err != nil {
 		return cleanupOnFailure(err)
 	}
 	return nil
@@ -89,13 +89,13 @@ func (m *Manager) cleanupInstallFailure(files AgentFiles, cause error) error {
 	if err := m.Bootout(files.SyncLabel); err != nil && !containsNotLoaded(err.Error()) {
 		cleanupErrs = append(cleanupErrs, fmt.Errorf("cleanup bootout sync failed: %w", err))
 	}
-	if files.ProxyPlistPath != "" {
-		if err := os.Remove(files.ProxyPlistPath); err != nil && !os.IsNotExist(err) {
+	if files.ProxyUnitPath != "" {
+		if err := os.Remove(files.ProxyUnitPath); err != nil && !os.IsNotExist(err) {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("cleanup remove proxy plist failed: %w", err))
 		}
 	}
-	if files.SyncPlistPath != "" {
-		if err := os.Remove(files.SyncPlistPath); err != nil && !os.IsNotExist(err) {
+	if files.SyncUnitPath != "" {
+		if err := os.Remove(files.SyncUnitPath); err != nil && !os.IsNotExist(err) {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("cleanup remove sync plist failed: %w", err))
 		}
 	}
@@ -105,18 +105,18 @@ func (m *Manager) cleanupInstallFailure(files AgentFiles, cause error) error {
 	return fmt.Errorf("%w; cleanup failed: %v", cause, errors.Join(cleanupErrs...))
 }
 
-func (m *Manager) RemoveAgents(proxyLabel, syncLabel, proxyPlistPath, syncPlistPath string) error {
+func (m *Manager) RemoveAgents(proxyLabel, syncLabel, proxyUnitPath, syncUnitPath string) error {
 	if err := m.Bootout(proxyLabel); err != nil && !containsNotLoaded(err.Error()) {
 		return err
 	}
 	if err := m.Bootout(syncLabel); err != nil && !containsNotLoaded(err.Error()) {
 		return err
 	}
-	if proxyPlistPath != "" {
-		_ = os.Remove(proxyPlistPath)
+	if proxyUnitPath != "" {
+		_ = os.Remove(proxyUnitPath)
 	}
-	if syncPlistPath != "" {
-		_ = os.Remove(syncPlistPath)
+	if syncUnitPath != "" {
+		_ = os.Remove(syncUnitPath)
 	}
 	return nil
 }
