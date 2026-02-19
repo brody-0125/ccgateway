@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ccgateway/internal/state"
@@ -305,5 +306,226 @@ func TestSmartRevertRemovesEmptyEnv(t *testing.T) {
 	}
 	if result["custom"] != "value" {
 		t.Fatalf("expected custom='value' preserved, got=%v", result["custom"])
+	}
+}
+
+func TestSmartRevertAfterNativeCleanupApply(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"model\": \"gpt-5.3-codex\",\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccb::codex::default::gen-1\",\n    \"ANTHROPIC_MODEL\": \"gpt-5.3-codex\",\n    \"MY_VAR\": \"keep\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := ApplyWithOptions(ApplyOptions{
+		SettingsPath: settingsPath,
+		SnapshotDir:  snapDir,
+		Port:         8317,
+		Model:        "gpt-5.3-codex",
+		Mode:         ApplyModeNativeCleanup,
+	})
+	if err != nil {
+		t.Fatalf("apply native-cleanup failed: %v", err)
+	}
+
+	// User adds a key after cleanup Apply.
+	applied, _ := os.ReadFile(settingsPath)
+	var doc map[string]any
+	json.Unmarshal(applied, &doc)
+	doc["user_added"] = "yes"
+	edited, _ := json.MarshalIndent(doc, "", "  ")
+	edited = append(edited, '\n')
+	os.WriteFile(settingsPath, edited, 0o600)
+
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(settingsPath)
+	var result map[string]any
+	json.Unmarshal(restored, &result)
+
+	// Original managed keys restored from snapshot.
+	if result["model"] != "gpt-5.3-codex" {
+		t.Fatalf("expected model restored, got=%v", result["model"])
+	}
+	resEnv, _ := result["env"].(map[string]any)
+	if resEnv["ANTHROPIC_BASE_URL"] != "http://127.0.0.1:8317" {
+		t.Fatalf("expected ANTHROPIC_BASE_URL restored, got=%v", resEnv["ANTHROPIC_BASE_URL"])
+	}
+	if resEnv["ANTHROPIC_AUTH_TOKEN"] != "ccb::codex::default::gen-1" {
+		t.Fatalf("expected ANTHROPIC_AUTH_TOKEN restored, got=%v", resEnv["ANTHROPIC_AUTH_TOKEN"])
+	}
+	if resEnv["ANTHROPIC_MODEL"] != "gpt-5.3-codex" {
+		t.Fatalf("expected ANTHROPIC_MODEL restored, got=%v", resEnv["ANTHROPIC_MODEL"])
+	}
+	// Non-managed keys preserved.
+	if resEnv["MY_VAR"] != "keep" {
+		t.Fatalf("expected MY_VAR='keep', got=%v", resEnv["MY_VAR"])
+	}
+	if result["user_added"] != "yes" {
+		t.Fatalf("expected user_added='yes' preserved, got=%v", result["user_added"])
+	}
+}
+
+func TestSmartRevertAfterNativeDirectApply(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:8317\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"ccb::codex::default::gen-1\",\n    \"CUSTOM\": \"val\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := ApplyWithOptions(ApplyOptions{
+		SettingsPath: settingsPath,
+		SnapshotDir:  snapDir,
+		Port:         8317,
+		Model:        "claude-opus-4-6",
+		Mode:         ApplyModeNativeDirect,
+	})
+	if err != nil {
+		t.Fatalf("apply native-direct failed: %v", err)
+	}
+
+	// User adds a key.
+	applied, _ := os.ReadFile(settingsPath)
+	var doc map[string]any
+	json.Unmarshal(applied, &doc)
+	doc["theme"] = "light"
+	edited, _ := json.MarshalIndent(doc, "", "  ")
+	edited = append(edited, '\n')
+	os.WriteFile(settingsPath, edited, 0o600)
+
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(settingsPath)
+	var result map[string]any
+	json.Unmarshal(restored, &result)
+
+	// Original had no model key.
+	if _, ok := result["model"]; ok {
+		t.Fatal("expected model removed (was not in original)")
+	}
+	resEnv, _ := result["env"].(map[string]any)
+	// Original proxy keys restored.
+	if resEnv["ANTHROPIC_BASE_URL"] != "http://127.0.0.1:8317" {
+		t.Fatalf("expected ANTHROPIC_BASE_URL restored, got=%v", resEnv["ANTHROPIC_BASE_URL"])
+	}
+	if resEnv["ANTHROPIC_AUTH_TOKEN"] != "ccb::codex::default::gen-1" {
+		t.Fatalf("expected ANTHROPIC_AUTH_TOKEN restored, got=%v", resEnv["ANTHROPIC_AUTH_TOKEN"])
+	}
+	// Model keys not in original -> removed.
+	if _, ok := resEnv["ANTHROPIC_MODEL"]; ok {
+		t.Fatal("expected ANTHROPIC_MODEL removed (not in original)")
+	}
+	// User changes preserved.
+	if resEnv["CUSTOM"] != "val" {
+		t.Fatalf("expected CUSTOM='val', got=%v", resEnv["CUSTOM"])
+	}
+	if result["theme"] != "light" {
+		t.Fatalf("expected theme='light' preserved, got=%v", result["theme"])
+	}
+}
+
+func TestSmartRevertWhenSettingsFileDeleted(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"env\": {\n    \"FOO\": \"BAR\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := Apply(settingsPath, snapDir, 18888, "gpt-5.3-codex")
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// Delete settings file.
+	os.Remove(settingsPath)
+
+	// SmartRevert should fall back to full Revert (file recreated from snapshot).
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert fallback on deleted file failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(settingsPath)
+	if state.HashBytes(restored) != state.HashBytes(original) {
+		t.Fatalf("expected full restore when file deleted, got:\n%s", string(restored))
+	}
+}
+
+func TestSmartRevertWithCorruptSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"env\": {\n    \"FOO\": \"BAR\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := Apply(settingsPath, snapDir, 18888, "gpt-5.3-codex")
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// Corrupt snapshot file (valid bytes but different content → hash mismatch).
+	if err := os.WriteFile(res.SnapshotPath, []byte("{\"corrupt\": true}\n"), 0o600); err != nil {
+		t.Fatalf("write corrupt snapshot failed: %v", err)
+	}
+
+	err = SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256)
+	if err == nil {
+		t.Fatal("expected error from corrupt snapshot, got nil")
+	}
+	if !strings.Contains(err.Error(), "snapshot hash mismatch") {
+		t.Fatalf("expected hash mismatch error, got: %v", err)
+	}
+}
+
+func TestSmartRevertWhenUserRemovesEnv(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	snapDir := filepath.Join(dir, "snapshots")
+	original := []byte("{\n  \"env\": {\n    \"MY_VAR\": \"x\"\n  }\n}\n")
+	if err := os.WriteFile(settingsPath, original, 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	res, err := Apply(settingsPath, snapDir, 18888, "gpt-5.3-codex")
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	// User deletes entire env key after Apply.
+	os.WriteFile(settingsPath, []byte("{\n  \"custom\": \"val\"\n}\n"), 0o600)
+
+	if err := SmartRevert(settingsPath, res.SnapshotPath, res.SnapshotSHA256); err != nil {
+		t.Fatalf("smart revert failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(settingsPath)
+	var result map[string]any
+	json.Unmarshal(restored, &result)
+
+	// User's custom key preserved.
+	if result["custom"] != "val" {
+		t.Fatalf("expected custom='val', got=%v", result["custom"])
+	}
+	// SmartRevert only restores managed keys from snapshot; MY_VAR is
+	// non-managed, so it stays absent after the user deleted env.
+	resEnv, _ := result["env"].(map[string]any)
+	if _, ok := resEnv["MY_VAR"]; ok {
+		t.Fatalf("expected MY_VAR absent (user deleted env, non-managed key), got=%v", resEnv["MY_VAR"])
+	}
+	// Managed keys not in original should not appear.
+	for _, key := range ManagedEnvKeys() {
+		if _, ok := resEnv[key]; ok {
+			t.Fatalf("expected managed env key %s absent, got=%v", key, resEnv[key])
+		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	claudesettings "ccgateway/internal/claude"
 	"ccgateway/internal/config"
 	"ccgateway/internal/control"
 	modelnorm "ccgateway/internal/model"
@@ -818,11 +819,5 @@ func isManagedProxyToken(v string) bool {
 }
 
 func managedModelEnvKeys() []string {
-	return []string{
-		"ANTHROPIC_MODEL",
-		"ANTHROPIC_SMALL_FAST_MODEL",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
-	}
+	return claudesettings.ManagedModelEnvKeys()
 }

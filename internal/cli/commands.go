@@ -2748,9 +2748,21 @@ func (a *application) cmdUninstall(args []string) error {
 					active.ActiveGeneration,
 					rt.State.Claude.AppliedGeneration,
 				)
-				return nil
+				// Clear stale claude state even when skipping revert for inactive scope.
+				rt.State.Claude.Applied = false
+				rt.State.Claude.SnapshotPath = ""
+				rt.State.Claude.SnapshotSHA256 = ""
+				rt.State.Claude.AppliedGeneration = ""
+				return state.Save(rt.Paths.StatePath, rt.State)
 			}
-			return rt.Bundle.Claude.SmartRevert(context.Background(), toProviderRuntime(rt), rt.State.Claude.SnapshotPath, rt.State.Claude.SnapshotSHA256)
+			if err := rt.Bundle.Claude.SmartRevert(context.Background(), toProviderRuntime(rt), rt.State.Claude.SnapshotPath, rt.State.Claude.SnapshotSHA256); err != nil {
+				return err
+			}
+			rt.State.Claude.Applied = false
+			rt.State.Claude.SnapshotPath = ""
+			rt.State.Claude.SnapshotSHA256 = ""
+			rt.State.Claude.AppliedGeneration = ""
+			return state.Save(rt.Paths.StatePath, rt.State)
 		}); err != nil {
 			if cberr.Code(err) != cberr.ErrUnknown {
 				return err
@@ -2785,10 +2797,6 @@ func (a *application) cmdUninstall(args []string) error {
 		return nil
 	}
 
-	rt.State.Claude.Applied = false
-	rt.State.Claude.SnapshotPath = ""
-	rt.State.Claude.SnapshotSHA256 = ""
-	rt.State.Claude.AppliedGeneration = ""
 	rt.State.Service.Running = false
 	if err := state.Save(rt.Paths.StatePath, rt.State); err != nil {
 		return cberr.Wrap(cberr.ErrStateWriteFailed, "failed to persist state", err)

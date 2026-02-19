@@ -165,10 +165,15 @@ func SmartRevert(settingsPath, snapshotPath, snapshotSHA string) error {
 		return cberr.New(cberr.ErrClaudeRevertFailed, fmt.Sprintf("snapshot hash mismatch expected=%s actual=%s", snapshotSHA, snapHash))
 	}
 
-	// Read current settings; fall back to full Revert on any failure.
+	// Read current settings; fall back to full Revert only when the file is
+	// missing or deleted. For transient errors (permission denied, etc.) return
+	// the error to avoid silently discarding user changes.
 	curBytes, err := os.ReadFile(settingsPath)
 	if err != nil {
-		return Revert(settingsPath, snapshotPath, snapshotSHA)
+		if os.IsNotExist(err) {
+			return Revert(settingsPath, snapshotPath, snapshotSHA)
+		}
+		return cberr.Wrap(cberr.ErrClaudeRevertFailed, "failed to read current settings", err)
 	}
 
 	var snapDoc map[string]any
@@ -359,14 +364,21 @@ func clearManagedModelEnv(env map[string]any) {
 	}
 }
 
-func managedModelEnvKeys() []string {
-	return []string{
-		"ANTHROPIC_MODEL",
-		"ANTHROPIC_SMALL_FAST_MODEL",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+// ManagedModelEnvKeys returns the model-routing subset of ManagedEnvKeys
+// (excludes proxy connection keys ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN).
+func ManagedModelEnvKeys() []string {
+	out := make([]string, 0, len(ManagedEnvKeys()))
+	for _, k := range ManagedEnvKeys() {
+		if k == "ANTHROPIC_BASE_URL" || k == "ANTHROPIC_AUTH_TOKEN" {
+			continue
+		}
+		out = append(out, k)
 	}
+	return out
+}
+
+func managedModelEnvKeys() []string {
+	return ManagedModelEnvKeys()
 }
 
 func isLocalProxyBaseURL(v string) bool {
