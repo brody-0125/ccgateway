@@ -767,7 +767,7 @@ func (a *application) cmdService(args []string) error {
 
 	readOnly := sub == "status"
 	if !readOnly && *active {
-		return cberr.New(cberr.ErrInvalidArgs, "--active can only be used with 'ccgservice status'")
+		return cberr.New(cberr.ErrInvalidArgs, "--active can only be used with 'ccg service status'")
 	}
 	ref, err := a.resolveScope(*vendorID, *profileID, *active, readOnly)
 	if err != nil {

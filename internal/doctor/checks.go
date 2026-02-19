@@ -85,14 +85,14 @@ func settingsTargetCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "settings target",
 				OK:     false,
-				Detail: fmt.Sprintf("settings_layer=project requires settings_path=%s; run: ccgsetup --vendor %s --profile %s --settings-layer project", expected, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings_layer=project requires settings_path=%s; run: ccg setup --vendor %s --profile %s --settings-layer project", expected, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if filepath.Clean(path) != expected {
 			return CheckResult{
 				Name:   "settings target",
 				OK:     false,
-				Detail: fmt.Sprintf("settings_layer=project mismatch (configured=%s expected=%s for cwd=%s); run: ccgsetup --vendor %s --profile %s --settings-layer project", path, expected, input.Paths.Cwd, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings_layer=project mismatch (configured=%s expected=%s for cwd=%s); run: ccg setup --vendor %s --profile %s --settings-layer project", path, expected, input.Paths.Cwd, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{Name: "settings target", OK: true, Detail: path}
@@ -102,14 +102,14 @@ func settingsTargetCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "settings target",
 				OK:     false,
-				Detail: fmt.Sprintf("settings_layer=local requires settings_path=%s; run: ccgsetup --vendor %s --profile %s --settings-layer local", expected, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings_layer=local requires settings_path=%s; run: ccg setup --vendor %s --profile %s --settings-layer local", expected, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if filepath.Clean(path) != expected {
 			return CheckResult{
 				Name:   "settings target",
 				OK:     false,
-				Detail: fmt.Sprintf("settings_layer=local mismatch (configured=%s expected=%s for cwd=%s); run: ccgsetup --vendor %s --profile %s --settings-layer local", path, expected, input.Paths.Cwd, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings_layer=local mismatch (configured=%s expected=%s for cwd=%s); run: ccg setup --vendor %s --profile %s --settings-layer local", path, expected, input.Paths.Cwd, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{Name: "settings target", OK: true, Detail: path}
@@ -118,7 +118,7 @@ func settingsTargetCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "settings target",
 				OK:     false,
-				Detail: fmt.Sprintf("settings_layer=user requires settings_path; run: ccgsetup --vendor %s --profile %s --settings-layer user --settings-path ~/.claude/settings.json", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings_layer=user requires settings_path; run: ccg setup --vendor %s --profile %s --settings-layer user --settings-path ~/.claude/settings.json", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{Name: "settings target", OK: true, Detail: path}
@@ -138,14 +138,14 @@ func modelPolicyCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "model policy",
 				OK:     false,
-				Detail: fmt.Sprintf("model is empty; run: ccgbootstrap --vendor %s --profile %s --model gpt-5.3-codex", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("model is empty; run: ccg bootstrap --vendor %s --profile %s --model gpt-5.3-codex", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if _, err := modelnorm.NormalizeForVendor(input.Scope.VendorID, model); err != nil {
 			return CheckResult{
 				Name:   "model policy",
 				OK:     false,
-				Detail: fmt.Sprintf("invalid model for vendor=%s: %v; for Claude failover run: ccgfailover --from %s:%s --to claude:default --model claude-opus-4-6", input.Scope.VendorID, err, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("invalid model for vendor=%s: %v; for Claude failover run: ccg failover --from %s:%s --to claude:default --model claude-opus-4-6", input.Scope.VendorID, err, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{Name: "model policy", OK: true, Detail: model}
@@ -154,7 +154,7 @@ func modelPolicyCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "model policy",
 				OK:     false,
-				Detail: fmt.Sprintf("model is empty for runtime_mode=%s; run: ccgbootstrap --vendor %s --profile %s --runtime-mode native-direct --model claude-opus-4-6", config.RuntimeModeNativeDirect, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("model is empty for runtime_mode=%s; run: ccg bootstrap --vendor %s --profile %s --runtime-mode native-direct --model claude-opus-4-6", config.RuntimeModeNativeDirect, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{Name: "model policy", OK: true, Detail: model}
@@ -178,13 +178,13 @@ func policyGuardCheck(input ScopedInput) CheckResult {
 		return CheckResult{
 			Name:   "policy guard",
 			OK:     false,
-			Detail: fmt.Sprintf("%s; run: ccgsetup --vendor %s --profile %s --settings-layer project", first, input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("%s; run: ccg setup --vendor %s --profile %s --settings-layer project", first, input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	return CheckResult{
 		Name:   "policy guard",
 		OK:     false,
-		Detail: fmt.Sprintf("%s; run: ccgbootstrap --vendor %s --profile %s", first, input.Scope.VendorID, input.Scope.ProfileID),
+		Detail: fmt.Sprintf("%s; run: ccg bootstrap --vendor %s --profile %s", first, input.Scope.VendorID, input.Scope.ProfileID),
 	}
 }
 
@@ -279,7 +279,7 @@ func proxyRequirementCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "gateway backend",
 				OK:     false,
-				Detail: fmt.Sprintf("gateway_backend is empty; run: ccgbootstrap --vendor %s --profile %s --gateway-backend cliproxyapi", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("gateway_backend is empty; run: ccg bootstrap --vendor %s --profile %s --gateway-backend cliproxyapi", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if !input.Config.ProxyEnabled {
@@ -293,7 +293,7 @@ func proxyRequirementCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "proxy binary",
 				OK:     false,
-				Detail: fmt.Sprintf("missing (%s); run: ccgproxy install --vendor %s --profile %s", input.Paths.ProxyBinary, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("missing (%s); run: ccg proxy install --vendor %s --profile %s", input.Paths.ProxyBinary, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{Name: "proxy binary", OK: true, Detail: input.Paths.ProxyBinary}
@@ -345,7 +345,7 @@ func nativeSettingsCheck(input ScopedInput) CheckResult {
 		return CheckResult{
 			Name:   "native settings",
 			OK:     false,
-			Detail: fmt.Sprintf("top-level model override exists; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("top-level model override exists; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	env, _ := doc["env"].(map[string]any)
@@ -354,7 +354,7 @@ func nativeSettingsCheck(input ScopedInput) CheckResult {
 		return CheckResult{
 			Name:   "native settings",
 			OK:     false,
-			Detail: fmt.Sprintf("ANTHROPIC_BASE_URL points to local proxy (%s); run: ccgclaude apply --vendor %s --profile %s", baseURL, input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("ANTHROPIC_BASE_URL points to local proxy (%s); run: ccg claude apply --vendor %s --profile %s", baseURL, input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	token := asString(env["ANTHROPIC_AUTH_TOKEN"])
@@ -362,7 +362,7 @@ func nativeSettingsCheck(input ScopedInput) CheckResult {
 		return CheckResult{
 			Name:   "native settings",
 			OK:     false,
-			Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN looks proxy-managed; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN looks proxy-managed; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	for _, key := range managedModelEnvKeys() {
@@ -370,7 +370,7 @@ func nativeSettingsCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "native settings",
 				OK:     false,
-				Detail: fmt.Sprintf("%s should be removed in native cleanup mode; run: ccgclaude apply --vendor %s --profile %s", key, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("%s should be removed in native cleanup mode; run: ccg claude apply --vendor %s --profile %s", key, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 	}
@@ -385,7 +385,7 @@ func nativeDirectSettingsCheck(input ScopedInput) CheckResult {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return CheckResult{Name: "native direct settings", OK: false, Detail: fmt.Sprintf("settings not found (%s); run: ccgclaude apply --vendor %s --profile %s", path, input.Scope.VendorID, input.Scope.ProfileID)}
+			return CheckResult{Name: "native direct settings", OK: false, Detail: fmt.Sprintf("settings not found (%s); run: ccg claude apply --vendor %s --profile %s", path, input.Scope.VendorID, input.Scope.ProfileID)}
 		}
 		return CheckResult{Name: "native direct settings", OK: false, Detail: err.Error()}
 	}
@@ -399,7 +399,7 @@ func nativeDirectSettingsCheck(input ScopedInput) CheckResult {
 		return CheckResult{
 			Name:   "native direct settings",
 			OK:     false,
-			Detail: fmt.Sprintf("settings model mismatch (want=%q got=%q); run: ccgclaude apply --vendor %s --profile %s", input.Config.Model, asString(doc["model"]), input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("settings model mismatch (want=%q got=%q); run: ccg claude apply --vendor %s --profile %s", input.Config.Model, asString(doc["model"]), input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	env, _ := doc["env"].(map[string]any)
@@ -407,21 +407,21 @@ func nativeDirectSettingsCheck(input ScopedInput) CheckResult {
 		return CheckResult{
 			Name:   "native direct settings",
 			OK:     false,
-			Detail: fmt.Sprintf("ANTHROPIC_BASE_URL still points to local proxy; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("ANTHROPIC_BASE_URL still points to local proxy; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	if isManagedProxyToken(asString(env["ANTHROPIC_AUTH_TOKEN"])) {
 		return CheckResult{
 			Name:   "native direct settings",
 			OK:     false,
-			Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN still looks proxy-managed; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN still looks proxy-managed; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	if asString(env["ANTHROPIC_MODEL"]) != input.Config.Model {
 		return CheckResult{
 			Name:   "native direct settings",
 			OK:     false,
-			Detail: fmt.Sprintf("ANTHROPIC_MODEL mismatch (want=%q got=%q); run: ccgclaude apply --vendor %s --profile %s", input.Config.Model, asString(env["ANTHROPIC_MODEL"]), input.Scope.VendorID, input.Scope.ProfileID),
+			Detail: fmt.Sprintf("ANTHROPIC_MODEL mismatch (want=%q got=%q); run: ccg claude apply --vendor %s --profile %s", input.Config.Model, asString(env["ANTHROPIC_MODEL"]), input.Scope.VendorID, input.Scope.ProfileID),
 		}
 	}
 	return CheckResult{Name: "native direct settings", OK: true, Detail: path}
@@ -435,7 +435,7 @@ func routeProofCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("settings_path is empty; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings_path is empty; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		b, err := os.ReadFile(path)
@@ -444,7 +444,7 @@ func routeProofCheck(input ScopedInput) CheckResult {
 				return CheckResult{
 					Name:   "route proof",
 					OK:     false,
-					Detail: fmt.Sprintf("settings not found (%s); run: ccgclaude apply --vendor %s --profile %s", path, input.Scope.VendorID, input.Scope.ProfileID),
+					Detail: fmt.Sprintf("settings not found (%s); run: ccg claude apply --vendor %s --profile %s", path, input.Scope.VendorID, input.Scope.ProfileID),
 				}
 			}
 			return CheckResult{Name: "route proof", OK: false, Detail: err.Error()}
@@ -466,21 +466,21 @@ func routeProofCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("settings model mismatch (want=%q got=%q); run: ccgclaude apply --vendor %s --profile %s", input.Config.Model, gotModel, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings model mismatch (want=%q got=%q); run: ccg claude apply --vendor %s --profile %s", input.Config.Model, gotModel, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if gotBase != wantBase {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("ANTHROPIC_BASE_URL mismatch (want=%q got=%q); run: ccgclaude apply --vendor %s --profile %s", wantBase, gotBase, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("ANTHROPIC_BASE_URL mismatch (want=%q got=%q); run: ccg claude apply --vendor %s --profile %s", wantBase, gotBase, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if !(strings.HasPrefix(gotToken, wantTokenPrefix) || gotToken == "proxy-local") {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN is not ccgateway-managed; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN is not ccgateway-managed; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{
@@ -505,7 +505,7 @@ func routeProofCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("settings_path is empty; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings_path is empty; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		b, err := os.ReadFile(path)
@@ -514,7 +514,7 @@ func routeProofCheck(input ScopedInput) CheckResult {
 				return CheckResult{
 					Name:   "route proof",
 					OK:     false,
-					Detail: fmt.Sprintf("settings not found (%s); run: ccgclaude apply --vendor %s --profile %s", path, input.Scope.VendorID, input.Scope.ProfileID),
+					Detail: fmt.Sprintf("settings not found (%s); run: ccg claude apply --vendor %s --profile %s", path, input.Scope.VendorID, input.Scope.ProfileID),
 				}
 			}
 			return CheckResult{Name: "route proof", OK: false, Detail: err.Error()}
@@ -531,21 +531,21 @@ func routeProofCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("settings model mismatch (want=%q got=%q); run: ccgclaude apply --vendor %s --profile %s", input.Config.Model, gotModel, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("settings model mismatch (want=%q got=%q); run: ccg claude apply --vendor %s --profile %s", input.Config.Model, gotModel, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if isLocalProxyBaseURL(asString(env["ANTHROPIC_BASE_URL"])) {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("ANTHROPIC_BASE_URL still points local proxy; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("ANTHROPIC_BASE_URL still points local proxy; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		if isManagedProxyToken(asString(env["ANTHROPIC_AUTH_TOKEN"])) {
 			return CheckResult{
 				Name:   "route proof",
 				OK:     false,
-				Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN still proxy-managed; run: ccgclaude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("ANTHROPIC_AUTH_TOKEN still proxy-managed; run: ccg claude apply --vendor %s --profile %s", input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{
@@ -574,7 +574,7 @@ func modelProofCheck(input ScopedInput) CheckResult {
 				return CheckResult{
 					Name:   "model proof",
 					OK:     false,
-					Detail: fmt.Sprintf("proxy config missing (%s); run: ccgservice install --vendor %s --profile %s", input.Paths.ProxyConfig, input.Scope.VendorID, input.Scope.ProfileID),
+					Detail: fmt.Sprintf("proxy config missing (%s); run: ccg service install --vendor %s --profile %s", input.Paths.ProxyConfig, input.Scope.VendorID, input.Scope.ProfileID),
 				}
 			}
 			return CheckResult{Name: "model proof", OK: false, Detail: err.Error()}
@@ -583,7 +583,7 @@ func modelProofCheck(input ScopedInput) CheckResult {
 			return CheckResult{
 				Name:   "model proof",
 				OK:     false,
-				Detail: fmt.Sprintf("proxy config model mismatch (want=%q); run: ccgservice install --vendor %s --profile %s", input.Config.Model, input.Scope.VendorID, input.Scope.ProfileID),
+				Detail: fmt.Sprintf("proxy config model mismatch (want=%q); run: ccg service install --vendor %s --profile %s", input.Config.Model, input.Scope.VendorID, input.Scope.ProfileID),
 			}
 		}
 		return CheckResult{Name: "model proof", OK: true, Detail: fmt.Sprintf("proxy config matches model=%s", input.Config.Model)}
