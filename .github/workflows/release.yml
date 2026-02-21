@@ -69,24 +69,26 @@ jobs:
       - name: Run Tests
         run: go test ./...
 
-      - name: Build darwin binaries and archives
+      - name: Build binaries and archives
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
           VERSION="${{ steps.vars.outputs.version }}"
-          for ARCH in arm64 amd64; do
-            STAGING_DIR="dist/ccgateway_${VERSION}_darwin_${ARCH}"
-            ARCHIVE_PATH="${STAGING_DIR}.tar.gz"
-            mkdir -p "${STAGING_DIR}"
+          for OS in darwin linux; do
+            for ARCH in arm64 amd64; do
+              STAGING_DIR="dist/ccgateway_${VERSION}_${OS}_${ARCH}"
+              ARCHIVE_PATH="${STAGING_DIR}.tar.gz"
+              mkdir -p "${STAGING_DIR}"
 
-            GOOS=darwin GOARCH="${ARCH}" CGO_ENABLED=0 \
-              go build -trimpath -ldflags="-s -w" -o "${STAGING_DIR}/${BINARY_NAME}" ./cmd/ccg
+              GOOS="${OS}" GOARCH="${ARCH}" CGO_ENABLED=0 \
+                go build -trimpath -ldflags="-s -w" -o "${STAGING_DIR}/${BINARY_NAME}" ./cmd/ccg
 
-            chmod +x "${STAGING_DIR}/${BINARY_NAME}"
-            tar -czf "${ARCHIVE_PATH}" -C "${STAGING_DIR}" "${BINARY_NAME}"
-            rm -rf "${STAGING_DIR}"
+              chmod +x "${STAGING_DIR}/${BINARY_NAME}"
+              tar -czf "${ARCHIVE_PATH}" -C "${STAGING_DIR}" "${BINARY_NAME}"
+              rm -rf "${STAGING_DIR}"
+            done
           done
 
       - name: Generate checksums
