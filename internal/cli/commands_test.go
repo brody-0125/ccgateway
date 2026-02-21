@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +32,14 @@ import (
 	"ccgateway/internal/service"
 	"ccgateway/internal/state"
 )
+
+// stubServiceBinaries sets both CCG_LAUNCHCTL_BIN and CCG_SYSTEMCTL_BIN to the
+// given stub path so that tests use the stub on both macOS and Linux.
+func stubServiceBinaries(t *testing.T, stub string) {
+	t.Helper()
+	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	t.Setenv("CCG_SYSTEMCTL_BIN", stub)
+}
 
 func TestPromptWithDefault(t *testing.T) {
 	in := strings.NewReader("\ncustom\n")
@@ -239,7 +248,7 @@ func TestSetupNormalizesCodexSparkModelAlias(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -301,7 +310,7 @@ func TestSetupAppliesProjectSettingsLayer(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpCwd)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -693,7 +702,7 @@ func TestSetupNativeCleanupFlow(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 	t.Setenv("CCG_TEST_LAUNCHCTL_LOG", logFile)
 	app, err := newApplication()
 	if err != nil {
@@ -728,14 +737,24 @@ func TestSetupNativeCleanupFlow(t *testing.T) {
 	}
 	logs, err := os.ReadFile(logFile)
 	if err != nil {
-		t.Fatalf("read launchctl log failed: %v", err)
+		t.Fatalf("read service log failed: %v", err)
 	}
-	if !strings.Contains(string(logs), "bootout") {
-		t.Fatalf("expected service cleanup bootout call, got: %s", string(logs))
+	logText := string(logs)
+	if goruntime.GOOS == "darwin" {
+		if !strings.Contains(logText, "bootout") {
+			t.Fatalf("expected service cleanup bootout call, got: %s", logText)
+		}
+	} else {
+		if !strings.Contains(logText, "stop") && !strings.Contains(logText, "disable") {
+			t.Fatalf("expected service cleanup stop/disable call, got: %s", logText)
+		}
 	}
 }
 
 func TestSetupRecoversServiceStartByReinstallingAgents(t *testing.T) {
+	if goruntime.GOOS != "darwin" {
+		t.Skip("skipping: tests launchctl kickstart recovery path")
+	}
 	tmpHome := t.TempDir()
 	stub := filepath.Join(tmpHome, "launchctl")
 	marker := filepath.Join(tmpHome, "kickstart-sync.failed.once")
@@ -745,7 +764,7 @@ func TestSetupRecoversServiceStartByReinstallingAgents(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 	t.Setenv("CCG_TEST_RECOVER_MARKER", marker)
 
 	reg := provider.NewRegistry()
@@ -809,7 +828,7 @@ func TestServiceReconcileInstallsAndStartsService(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -864,6 +883,9 @@ func TestServiceReconcileInstallsAndStartsService(t *testing.T) {
 }
 
 func TestServiceStartAutoRecoversViaReconcile(t *testing.T) {
+	if goruntime.GOOS != "darwin" {
+		t.Skip("skipping: tests launchctl kickstart recovery path")
+	}
 	tmpHome := t.TempDir()
 	stub := filepath.Join(tmpHome, "launchctl")
 	marker := filepath.Join(tmpHome, "kickstart-sync.failed.once")
@@ -873,7 +895,7 @@ func TestServiceStartAutoRecoversViaReconcile(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 	t.Setenv("CCG_TEST_RECOVER_MARKER", marker)
 
 	reg := provider.NewRegistry()
@@ -1516,7 +1538,7 @@ func TestUninstallBlocksUnsafeClaudeRevertForActiveScope(t *testing.T) {
 
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1573,7 +1595,7 @@ func TestUninstallSkipsUnsafeClaudeRevertForInactiveScope(t *testing.T) {
 
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1685,6 +1707,9 @@ func TestServiceStatusRejectsBackendWithoutHealthImplementation(t *testing.T) {
 }
 
 func TestServiceStartRetriesHealthCheckUntilReady(t *testing.T) {
+	if goruntime.GOOS != "darwin" {
+		t.Skip("skipping: stub relies on launchctl print to simulate not-loaded status")
+	}
 	tmpHome := t.TempDir()
 	stub := filepath.Join(tmpHome, "launchctl")
 	stubScript := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"$cmd\" == \"print\" ]]; then\n  printf 'Could not find service\\n' >&2\n  exit 1\nfi\nexit 0\n"
@@ -1693,7 +1718,7 @@ func TestServiceStartRetriesHealthCheckUntilReady(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	reg := provider.NewRegistry()
 	if err := reg.Register(provider.Bundle{
@@ -1783,7 +1808,7 @@ func TestBootstrapReallocatesBusyPortWhenLaunchdServiceMissing(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -1842,7 +1867,7 @@ func TestUninstallPurgeFailsWhenActivePointerUnreadable(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
@@ -1900,7 +1925,7 @@ func TestUninstallUsesStoredServiceLabels(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 	t.Setenv("CCG_TEST_LAUNCHCTL_LOG", logFile)
 	app, err := newApplication()
 	if err != nil {
@@ -1925,11 +1950,14 @@ func TestUninstallUsesStoredServiceLabels(t *testing.T) {
 	}
 	logs, err := os.ReadFile(logFile)
 	if err != nil {
-		t.Fatalf("read launchctl log failed: %v", err)
+		t.Fatalf("read service log failed: %v", err)
 	}
 	text := string(logs)
-	if !strings.Contains(text, "gui/") || !strings.Contains(text, "com.custom.proxy") || !strings.Contains(text, "com.custom.sync") {
-		t.Fatalf("expected stored labels in launchctl calls, got: %s", text)
+	if !strings.Contains(text, "com.custom.proxy") || !strings.Contains(text, "com.custom.sync") {
+		t.Fatalf("expected stored labels in service calls, got: %s", text)
+	}
+	if goruntime.GOOS == "darwin" && !strings.Contains(text, "gui/") {
+		t.Fatalf("expected gui/ domain in launchctl calls, got: %s", text)
 	}
 }
 
@@ -2054,7 +2082,7 @@ func TestModelSwitchSuccessAppliesSparkModel(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	app, err := newApplication()
 	if err != nil {
@@ -2162,7 +2190,7 @@ func TestModelSwitchRollsBackConfigStateAndSettingsOnDoctorFailure(t *testing.T)
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	backendReg := backend.NewRegistry()
 	if err := backendReg.Register(backend.Bundle{
@@ -2314,7 +2342,7 @@ func TestModelSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	app, err := newApplication()
 	if err != nil {
@@ -2432,7 +2460,7 @@ func TestFailoverConcurrentSourceChangeFailsWithoutClobberingActive(t *testing.T
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
@@ -2691,6 +2719,9 @@ func TestFailoverRollsBackOnDoctorFailure(t *testing.T) {
 }
 
 func TestFailoverRestoresTargetScopeOnBootstrapFailure(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping: read-only lock file does not block root")
+	}
 	tmpHome := t.TempDir()
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
@@ -2851,7 +2882,7 @@ func TestFailoverRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
@@ -2931,7 +2962,7 @@ func TestFailoverRoundtripCodexClaudeCodex(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	// Allocate port for proxy mock.
 	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
@@ -3402,7 +3433,7 @@ func TestScopeSwitchRoundtripCodexClaudeCodex(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	// Allocate port for proxy mock.
 	probe, probeErr := net.Listen("tcp", "127.0.0.1:0")
@@ -3772,7 +3803,7 @@ func TestScopeSwitchGatewayTargetSuccess(t *testing.T) {
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	// Allocate a free port for the proxy mock.
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
@@ -3897,7 +3928,7 @@ func TestScopeSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 	}
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
@@ -3995,7 +4026,7 @@ func TestScopeSwitchRollbackCleansNewGatewayTargetArtifacts(t *testing.T) {
 
 	t.Setenv("CCG_HOME", tmpHome)
 	t.Setenv("CCG_CWD", tmpHome)
-	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
+	stubServiceBinaries(t, stub)
 
 	authSource := filepath.Join(tmpHome, ".codex", "auth.json")
 	if err := os.MkdirAll(filepath.Dir(authSource), 0o755); err != nil {
