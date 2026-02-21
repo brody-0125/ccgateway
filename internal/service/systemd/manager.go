@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Manager provides low-level systemd user-unit lifecycle operations.
@@ -217,7 +218,7 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	tmp := fmt.Sprintf("%s.tmp.%d", path, os.Getpid())
+	tmp := fmt.Sprintf("%s.tmp.%d.%d", path, os.Getpid(), time.Now().UTC().UnixNano())
 	if err := os.WriteFile(tmp, data, mode); err != nil {
 		return err
 	}
