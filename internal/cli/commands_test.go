@@ -2316,6 +2316,13 @@ func TestModelSwitchConcurrentActiveChangeFailsWithoutClobberingActive(t *testin
 	t.Setenv("CCG_CWD", tmpHome)
 	t.Setenv("CCG_LAUNCHCTL_BIN", stub)
 
+	systemctlStub := filepath.Join(tmpHome, "systemctl")
+	systemctlStubScript := "#!/usr/bin/env bash\nif [[ \"${2:-}\" == \"start\" ]]; then\n  sleep 0.25\nfi\nexit 0\n"
+	if err := os.WriteFile(systemctlStub, []byte(systemctlStubScript), 0o755); err != nil {
+		t.Fatalf("write systemctl stub failed: %v", err)
+	}
+	t.Setenv("CCG_SYSTEMCTL_BIN", systemctlStub)
+
 	app, err := newApplication()
 	if err != nil {
 		t.Fatalf("newApplication failed: %v", err)
